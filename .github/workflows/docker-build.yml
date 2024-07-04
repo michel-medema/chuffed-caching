@@ -2,9 +2,16 @@ name: Chuffed Docker image
 
 on:
   workflow_dispatch:
+
+  push:
+    branches:
+      - main
   
   release:
     types: [published]
+
+permissions:
+  packages: write
 
 jobs:
   push_to_registry:
