@@ -1,0 +1,30 @@
+name: Chuffed Docker image
+
+on:
+  workflow_dispatch:
+  
+  release:
+    types: [published]
+
+jobs:
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+      
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: chuffed
+          file: chuffed/Dockerfile
+          push: true
+          tags: ghcr.io/michel-medema/chuffed:latest
