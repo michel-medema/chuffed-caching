@@ -8,6 +8,8 @@
 #include "chuffed/vars/int-var.h"
 #include "chuffed/vars/vars.h"
 
+#include "chuffed/caching/propagators/Table.h"
+
 #include <cassert>
 #include <cstdio>
 
@@ -27,12 +29,27 @@ void table_GAC(vec<IntVar*>& x, vec<vec<int> >& t) {
 	}
 	const int base_lit = 2 * sat.nVars();
 	if (x.size() != 2) {
+		std::vector<IntVar*> xs;
+		xs.reserve(x.size());
+
+		std::vector<BoolView> bools;
+		bools.reserve(t.size());
+
+		for (int i = 0; i < x.size(); i++) {
+			xs.push_back( x[i] );
+		}
+
 		for (int i = 0; i < t.size(); i++) {
 			sat.newVar();
+
+			bools.emplace_back( toLit(base_lit+2*i) );
+
 			for (int j = 0; j < x.size(); j++) {
 				sat.addClause(toLit(base_lit + 2 * i), x[j]->getLit(t[i][j], LR_EQ));
 			}
 		}
+
+		new Table(xs, bools);
 	}
 	for (int w = 0; w < x.size(); w++) {
 		const int sup_off = x[w]->getMin();

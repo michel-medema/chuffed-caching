@@ -5,12 +5,19 @@
 #include "chuffed/support/vec.h"
 #include "chuffed/vars/bool-view.h"
 
+#include "chuffed/caching/propagators/Boolean.h"
+
 #include <utility>
 
 void bool_rel(BoolView x, BoolRelType t, BoolView y, BoolView z) {
 	//	NOT_SUPPORTED;
 	const BoolView v[3] = {std::move(x), std::move(y), std::move(z)};
 	int u = 0;
+
+	// Add boolean variables to engine for caching.
+	engine.addBool( x );
+	engine.addBool( y );
+	engine.addBool( z );
 
 	for (int l = 1; l <= 3; l++) {
 		for (int i = 0; i < 8; i++) {
@@ -78,6 +85,15 @@ void bool_clause(vec<BoolView>& x, vec<BoolView>& y) {
 		ps.push(~y[i]);
 	}
 	sat.addClause(ps);
+
+	// Add Boolean propagator for caching.
+	std::vector<BoolView> lits;
+	lits.reserve( x.size() + y.size() );
+
+	for (int i = 0; i < x.size(); ++i) { lits.push_back( x[i] ); }
+	for (int i = 0; i < y.size(); ++i) { lits.push_back( ~y[i] ); }
+
+	new Boolean( lits);
 }
 
 // \/ x_i
@@ -108,6 +124,16 @@ void array_bool_or(vec<BoolView>& x, vec<BoolView>& y, BoolView z) {
 		ps.push(~y[i]);
 	}
 	sat.addClause(ps);
+
+	// Add Boolean propagator for caching.
+	std::vector<BoolView> lits;
+	lits.reserve( x.size() + y.size() + 1 );
+
+	for (int i = 0; i < x.size(); ++i) { lits.push_back( x[i] ); }
+	for (int i = 0; i < y.size(); ++i) { lits.push_back( ~y[i] ); }
+	lits.push_back( ~z );
+
+	new Boolean( lits);
 }
 
 void array_bool_or(vec<BoolView>& x, BoolView z) {

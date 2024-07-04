@@ -11,6 +11,8 @@
 #include "chuffed/vars/int-view.h"
 #include "chuffed/vars/vars.h"
 
+#include "chuffed/caching/propagators/EquivalenceConstraint.h"
+
 #include <cassert>
 #include <cstdint>
 #include <utility>
@@ -18,75 +20,96 @@
 // x >= y <- r
 
 template <int U, int V, int R = 0>
-class BinGE : public Propagator {
+class BinGE : public EquivalenceConstraint {
 	const IntView<U> x;
 	const IntView<V> y;
 	BoolView r;
 
-public:
-	BinGE(IntView<U> _x, IntView<V> _y, BoolView _r = bv_true) : x(_x), y(_y), r(std::move(_r)) {
-		x.attach(this, 0, EVENT_U);
-		y.attach(this, 1, EVENT_L);
-		if (R != 0) {
-			r.attach(this, 2, EVENT_L);
-		}
-	}
+	public:
+		BinGE(IntView<U> _x, IntView<V> _y, BoolView _r = bv_true) : EquivalenceConstraint(3), x(_x), y(_y), r(std::move(_r)) {
+			x.attach(this, 0, EVENT_U | EVENT_F);
+			y.attach(this, 1, EVENT_L | EVENT_F);
+			if (R != 0) {
+				r.attach(this, 2, EVENT_L | EVENT_U);
+			}
 
-	void wakeup(int /*i*/, int /*c*/) override {
-		if ((R == 0) || !r.isFalse()) {
-			pushInQueue();
+			if ( R == 0 || r.isFixed() || x.isFixed() || y.isFixed() ) { keyIsTrue = true; }
+			if ( R != 0 && !r.isFixed() ) { engine.addBool( r ); }
 		}
-	}
 
-	bool propagate() override {
-		if ((R != 0) && r.isFalse()) {
+		void wakeup(int i, int c) override {
+			if ( (c & x.getEvent(EVENT_U) ) != 0 || (c & y.getEvent(EVENT_L) ) != 0 || i == 2 ) {
+				if ((R == 0) || !r.isFalse()) {
+					pushInQueue();
+				}
+			}
+
+			if ( (c & EVENT_F) != 0 || i == 2 ) {
+				fixed++;
+				this->checkSatisfied();
+			}
+		}
+
+		bool propagate() override {
+			if ((R != 0) && r.isFalse()) {
+				return true;
+			}
+
+			const int64_t x_max = x.getMax();
+			const int64_t y_min = y.getMin();
+
+			// Can finesse!!
+			if ((R != 0) && x_max < y_min) {
+				setDom(r, setVal, 0, x.getMaxLit(), y.getMinLit());
+			}
+
+			if ((R != 0) && !r.isTrue()) {
+				return true;
+			}
+
+			// Finesses x's lower bound
+			if (R != 0) {
+				setDom(x, setMin, y_min, y.getMinLit(), r.getValLit());
+			} else {
+				setDom(x, setMin, y_min, y.getMinLit());
+			}
+			if (R != 0) {
+				setDom(y, setMax, x_max, x.getMaxLit(), r.getValLit());
+			} else {
+				setDom(y, setMax, x_max, x.getMaxLit());
+			}
+
+			if (x.getMin() >= y.getMax()) {
+				satisfied = true;
+			}
+
 			return true;
 		}
 
-		const int64_t x_max = x.getMax();
-		const int64_t y_min = y.getMin();
-
-		// Can finesse!!
-		if ((R != 0) && x_max < y_min) {
-			setDom(r, setVal, 0, x.getMaxLit(), y.getMinLit());
+		int checkSatisfied() override {
+			if (satisfied) {
+				return 1;
+			}
+			if (r.isFalse()) {
+				satisfied = true;
+				return 1;
+			}
+			if (x.getMin() >= y.getMax()) {
+				satisfied = true;
+			}
+			return 3;
 		}
 
-		if ((R != 0) && !r.isTrue()) {
-			return true;
+		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+			ints.emplace_back( val( x).value_or( INT_MAX) );
+			ints.emplace_back( val( y).value_or( INT_MAX) );
+			bools.emplace_back( r.isTrue() );
 		}
 
-		// Finesses x's lower bound
-		if (R != 0) {
-			setDom(x, setMin, y_min, y.getMinLit(), r.getValLit());
-		} else {
-			setDom(x, setMin, y_min, y.getMinLit());
+	protected:
+		std::vector<int> scope() const override {
+			return std::vector<int>{ x.var->var_id, y.var->var_id };
 		}
-		if (R != 0) {
-			setDom(y, setMax, x_max, x.getMaxLit(), r.getValLit());
-		} else {
-			setDom(y, setMax, x_max, x.getMaxLit());
-		}
-
-		if (x.getMin() >= y.getMax()) {
-			satisfied = true;
-		}
-
-		return true;
-	}
-
-	int checkSatisfied() override {
-		if (satisfied) {
-			return 1;
-		}
-		if (r.isFalse()) {
-			satisfied = true;
-			return 1;
-		}
-		if (x.getMin() >= y.getMax()) {
-			satisfied = true;
-		}
-		return 3;
-	}
 };
 
 //-----
@@ -94,78 +117,97 @@ public:
 // y != x <- r
 
 template <int U = 0, int V = 0, int R = 0>
-class BinNE : public Propagator, public Checker {
-public:
-	IntView<U> x;
-	IntView<V> y;
-	BoolView r;
+class BinNE : public EquivalenceConstraint, public Checker {
+	public:
+		IntView<U> x;
+		IntView<V> y;
+		BoolView r;
 
-	BinNE(IntView<U> _x, IntView<V> _y, BoolView _r = bv_true) : x(_x), y(_y), r(std::move(_r)) {
-		x.attach(this, 0, EVENT_F);
-		y.attach(this, 1, EVENT_F);
-		if (R != 0) {
-			r.attach(this, 2, EVENT_L);
-		}
-		//		printf("BinNE: %d %d %d\n", U, V, R);
-	}
-
-	void wakeup(int /*i*/, int /*c*/) override {
-		if ((R == 0) || !r.isFalse()) {
-			pushInQueue();
-		}
-	}
-
-	bool propagate() override {
-		if ((R != 0) && r.isFalse()) {
-			return true;
-		}
-
-		if (x.isFixed() && y.isFixed() && x.getVal() == y.getVal()) {
-			setDom(r, setVal, 0, x.getValLit(), y.getValLit());
-		}
-
-		if ((R != 0) && !r.isTrue()) {
-			return true;
-		}
-
-		if (x.isFixed()) {
+		BinNE(IntView<U> _x, IntView<V> _y, BoolView _r = bv_true) : EquivalenceConstraint(3), x(_x), y(_y), r(std::move(_r)) {
+			x.attach(this, 0, EVENT_F);
+			y.attach(this, 1, EVENT_F);
 			if (R != 0) {
-				setDom(y, remVal, x.getVal(), x.getValLit(), r.getValLit());
-			} else {
-				setDom(y, remVal, x.getVal(), x.getValLit());
+				r.attach(this, 2, EVENT_L | EVENT_U);
 			}
+			//		printf("BinNE: %d %d %d\n", U, V, R);
+
+			if ( R == 0 || r.isFixed() || x.isFixed() || y.isFixed() ) { keyIsTrue = true; }
+			if ( R != 0 && !r.isFixed() ) { engine.addBool( r ); }
 		}
-		if (y.isFixed()) {
-			if (R != 0) {
-				setDom(x, remVal, y.getVal(), y.getValLit(), r.getValLit());
-			} else {
-				setDom(x, remVal, y.getVal(), y.getValLit());
+
+		void wakeup(int i, int c) override {
+			if ((R == 0) || !r.isFalse()) {
+				pushInQueue();
+			}
+
+			if ( (c & EVENT_F) != 0 || i == 2 ) {
+				fixed++;
+				this->checkSatisfied();
 			}
 		}
 
-		return true;
-	}
+		bool propagate() override {
+			if ((R != 0) && r.isFalse()) {
+				return true;
+			}
 
-	bool check() override {
-		if (R != 0) {
-			NOT_SUPPORTED;
-		}
-		return (x.getShadowVal() != y.getShadowVal());
-	}
+			if (x.isFixed() && y.isFixed() && x.getVal() == y.getVal()) {
+				setDom(r, setVal, 0, x.getValLit(), y.getValLit());
+			}
 
-	int checkSatisfied() override {
-		if (satisfied) {
-			return 1;
+			if ((R != 0) && !r.isTrue()) {
+				return true;
+			}
+
+			if (x.isFixed()) {
+				if (R != 0) {
+					setDom(y, remVal, x.getVal(), x.getValLit(), r.getValLit());
+				} else {
+					setDom(y, remVal, x.getVal(), x.getValLit());
+				}
+			}
+			if (y.isFixed()) {
+				if (R != 0) {
+					setDom(x, remVal, y.getVal(), y.getValLit(), r.getValLit());
+				} else {
+					setDom(x, remVal, y.getVal(), y.getValLit());
+				}
+			}
+
+			return true;
 		}
-		if (r.isFalse()) {
-			satisfied = true;
-			return 1;
+
+		bool check() override {
+			if (R != 0) {
+				NOT_SUPPORTED;
+			}
+			return (x.getShadowVal() != y.getShadowVal());
 		}
-		if (x.getMin() > y.getMax() || x.getMax() < y.getMin()) {
-			satisfied = true;
+
+		int checkSatisfied() override {
+			if (satisfied) {
+				return 1;
+			}
+			if (r.isFalse()) {
+				satisfied = true;
+				return 1;
+			}
+			if (x.getMin() > y.getMax() || x.getMax() < y.getMin()) {
+				satisfied = true;
+			}
+			return 3;
 		}
-		return 3;
-	}
+
+		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+			ints.emplace_back( val( x ).value_or( INT_MAX) );
+			ints.emplace_back( val( y ).value_or( INT_MAX) );
+			bools.emplace_back( r.isTrue() );
+		}
+
+	protected:
+		std::vector<int> scope() const override {
+			return std::vector<int>{ x.var->var_id, y.var->var_id };
+		}
 };
 
 //-----

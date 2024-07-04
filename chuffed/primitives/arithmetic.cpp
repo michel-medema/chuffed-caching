@@ -9,6 +9,11 @@
 #include "chuffed/vars/int-view.h"
 #include "chuffed/vars/vars.h"
 
+#include "chuffed/caching/propagators/CachingConstraint.h"
+#include "chuffed/caching/propagators/EquivalenceConstraint.h"
+#include "chuffed/caching/propagators/DominanceConstraint.h"
+#include "chuffed/caching/keys/constraints/CMinimum.h"
+
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -20,7 +25,7 @@
 // y = |x|
 
 template <int U = 0, int V = 0>
-class Abs : public Propagator, public Checker {
+class Abs : public CachingConstraint, public Checker {
 public:
 	IntView<U> x;
 	IntView<V> y;
@@ -259,100 +264,212 @@ void int_pow(IntVar* x, IntVar* y, IntVar* z) {
 // x * y = z
 
 template <int X = 0, int Y = 0, int Z = 0>
-class TimesAll : public Propagator {
-public:
-	IntView<X> x;
-	IntView<Y> y;
-	IntView<Z> z;
+class TimesAll : public EquivalenceConstraint {
+	public:
+		IntView<X> x;
+		IntView<Y> y;
+		IntView<Z> z;
 
-	TimesAll(IntView<X> _x, IntView<Y> _y, IntView<Z> _z) : x(_x), y(_y), z(_z) {
-		priority = 1;
-		x.attach(this, 0, EVENT_LU);
-		y.attach(this, 1, EVENT_LU);
-		z.attach(this, 2, EVENT_LU);
-	}
-
-	bool propagate() override {
-		const int64_t x_min = x.getMin();
-		const int64_t x_max = x.getMax();
-		const int64_t y_min = y.getMin();
-		const int64_t y_max = y.getMax();
-
-		// Propagating the bounds on z
-		if (!propagate_z(x_min, x_max, y_min, y_max)) {
-			return false;
+		TimesAll(IntView<X> _x, IntView<Y> _y, IntView<Z> _z) : EquivalenceConstraint(3), x(_x), y(_y), z(_z) {
+			priority = 1;
+			x.attach(this, 0, EVENT_LU | EVENT_F);
+			y.attach(this, 1, EVENT_LU | EVENT_F);
+			z.attach(this, 2, EVENT_LU | EVENT_F);
 		}
 
-		const int64_t z_min = z.getMin();
-		const int64_t z_max = z.getMax();
-
-		// Propagating the bounds on x
-		if (!propagate_xy(x, y, y_min, y_max, z_min, z_max)) {
-			return false;
-		}
-
-		// Propagating the bounds on y
-		if (!propagate_xy(y, x, x_min, x_max, z_min, z_max)) {
-			return false;
-		}
-
-		return true;
-	}
-
-	// Propagation on the bounds of z
-	bool propagate_z(const int64_t x_min, const int64_t x_max, const int64_t y_min,
-									 const int64_t y_max) {
-		// Computing all possible extreme points of x * y
-		const int64_t prod_min_min = x_min * y_min;
-		const int64_t prod_min_max = x_min * y_max;
-		const int64_t prod_max_min = x_max * y_min;
-		const int64_t prod_max_max = x_max * y_max;
-
-		// New lower bound on z
-		int64_t z_min_new = std::min(prod_min_min, prod_min_max);
-		z_min_new = std::min(z_min_new, prod_max_min);
-		z_min_new = std::min(z_min_new, prod_max_max);
-
-		if (z_min_new > IntVar::min_limit) {
-			// TODO Better explanation
-			Clause* reason = nullptr;
-			if (so.lazy) {
-				reason = Reason_new(5);
-				(*reason)[1] = x.getMinLit();
-				(*reason)[2] = x.getMaxLit();
-				(*reason)[3] = y.getMinLit();
-				(*reason)[4] = y.getMaxLit();
+		void wakeup(int /*i*/, int c) override {
+			if ( ( c & x.getEvent(EVENT_LU) ) != 0 || ( c & y.getEvent(EVENT_LU) ) != 0 || ( c & z.getEvent(EVENT_LU) ) != 0 ) {
+				pushInQueue();
 			}
-			setDom(z, setMin, z_min_new, reason);
+
+			if ( (c & EVENT_F) != 0 ) { fixed++; }
 		}
 
-		// New upper bound on z
-		int64_t z_max_new = std::max(prod_min_min, prod_min_max);
-		z_max_new = std::max(z_max_new, prod_max_min);
-		z_max_new = std::max(z_max_new, prod_max_max);
+		bool propagate() override {
+			const int64_t x_min = x.getMin();
+			const int64_t x_max = x.getMax();
+			const int64_t y_min = y.getMin();
+			const int64_t y_max = y.getMax();
 
-		if (z_max_new < IntVar::max_limit) {
-			// TODO Better explanation
-			Clause* reason = nullptr;
-			if (so.lazy) {
-				reason = Reason_new(5);
-				(*reason)[1] = x.getMinLit();
-				(*reason)[2] = x.getMaxLit();
-				(*reason)[3] = y.getMinLit();
-				(*reason)[4] = y.getMaxLit();
+			// Propagating the bounds on z
+			if (!propagate_z(x_min, x_max, y_min, y_max)) {
+				return false;
 			}
-			setDom(z, setMax, z_max_new, reason);
+
+			const int64_t z_min = z.getMin();
+			const int64_t z_max = z.getMax();
+
+			// Propagating the bounds on x
+			if (!propagate_xy(x, y, y_min, y_max, z_min, z_max)) {
+				return false;
+			}
+
+			// Propagating the bounds on y
+			if (!propagate_xy(y, x, x_min, x_max, z_min, z_max)) {
+				return false;
+			}
+
+			return true;
 		}
 
-		return true;
-	}
+		// Propagation on the bounds of z
+		bool propagate_z(const int64_t x_min, const int64_t x_max, const int64_t y_min,
+										 const int64_t y_max) {
+			// Computing all possible extreme points of x * y
+			const int64_t prod_min_min = x_min * y_min;
+			const int64_t prod_min_max = x_min * y_max;
+			const int64_t prod_max_min = x_max * y_min;
+			const int64_t prod_max_max = x_max * y_max;
 
-	template <int U, int V>
-	bool propagate_xy(IntView<U> u, IntView<V> v, const int64_t v_min, const int64_t v_max,
-										const int64_t z_min, const int64_t z_max) {
-		if (z_min == 0 && z_max == 0) {
-			// The product z equals to 0. Then x must equal to 0 too if y cannot be 0.
-			if (v_min > 0 || v_max < 0) {
+			// New lower bound on z
+			int64_t z_min_new = std::min(prod_min_min, prod_min_max);
+			z_min_new = std::min(z_min_new, prod_max_min);
+			z_min_new = std::min(z_min_new, prod_max_max);
+
+			if (z_min_new > IntVar::min_limit) {
+				// TODO Better explanation
+				Clause* reason = nullptr;
+				if (so.lazy) {
+					reason = Reason_new(5);
+					(*reason)[1] = x.getMinLit();
+					(*reason)[2] = x.getMaxLit();
+					(*reason)[3] = y.getMinLit();
+					(*reason)[4] = y.getMaxLit();
+				}
+				setDom(z, setMin, z_min_new, reason);
+			}
+
+			// New upper bound on z
+			int64_t z_max_new = std::max(prod_min_min, prod_min_max);
+			z_max_new = std::max(z_max_new, prod_max_min);
+			z_max_new = std::max(z_max_new, prod_max_max);
+
+			if (z_max_new < IntVar::max_limit) {
+				// TODO Better explanation
+				Clause* reason = nullptr;
+				if (so.lazy) {
+					reason = Reason_new(5);
+					(*reason)[1] = x.getMinLit();
+					(*reason)[2] = x.getMaxLit();
+					(*reason)[3] = y.getMinLit();
+					(*reason)[4] = y.getMaxLit();
+				}
+				setDom(z, setMax, z_max_new, reason);
+			}
+
+			return true;
+		}
+
+		template <int U, int V>
+		bool propagate_xy(IntView<U> u, IntView<V> v, const int64_t v_min, const int64_t v_max,
+											const int64_t z_min, const int64_t z_max) {
+			if (z_min == 0 && z_max == 0) {
+				// The product z equals to 0. Then x must equal to 0 too if y cannot be 0.
+				if (v_min > 0 || v_max < 0) {
+					// TODO Better explanation
+					Clause* reason = nullptr;
+					if (so.lazy) {
+						reason = Reason_new(5);
+						(*reason)[1] = v.getMinLit();
+						(*reason)[2] = v.getMaxLit();
+						(*reason)[3] = z.getMinLit();
+						(*reason)[4] = z.getMaxLit();
+					}
+					setDom(u, setMin, 0, reason);
+					setDom(u, setMax, 0, reason);
+				}
+			} else if (z_min > 0) {
+				if (v_min == 0) {
+					// TODO Better explanation
+					Clause* reason = nullptr;
+					if (so.lazy) {
+						reason = Reason_new(3);
+						(*reason)[1] = z.getMinLit();
+						(*reason)[2] = v.getMinLit();
+					}
+					setDom(v, setMin, 1, reason);
+				} else if (v_max == 0) {
+					// TODO Better explanation
+					Clause* reason = nullptr;
+					if (so.lazy) {
+						reason = Reason_new(3);
+						(*reason)[1] = z.getMinLit();
+						(*reason)[2] = v.getMaxLit();
+					}
+					setDom(v, setMax, -1, reason);
+				} else {
+					if (!propagate_xy_min(u, v, v_min, v_max, z_min, z_max)) {
+						return false;
+					}
+					if (!propagate_xy_max(u, v, v_min, v_max, z_min, z_max)) {
+						return false;
+					}
+				}
+			} else if (z_max < 0) {
+				if (v_min == 0) {
+					// TODO Better explanation
+					Clause* reason = nullptr;
+					if (so.lazy) {
+						reason = Reason_new(3);
+						(*reason)[1] = z.getMaxLit();
+						(*reason)[2] = v.getMinLit();
+					}
+					setDom(v, setMin, 1, reason);
+				} else if (v_max == 0) {
+					// TODO Better explanation
+					Clause* reason = nullptr;
+					if (so.lazy) {
+						reason = Reason_new(3);
+						(*reason)[1] = z.getMaxLit();
+						(*reason)[2] = v.getMaxLit();
+					}
+					setDom(v, setMax, -1, reason);
+				} else {
+					if (!propagate_xy_min(u, v, v_min, v_max, z_min, z_max)) {
+						return false;
+					}
+					if (!propagate_xy_max(u, v, v_min, v_max, z_min, z_max)) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+
+		template <int U, int V>
+		bool propagate_xy_min(IntView<U> u, IntView<V> v, const int64_t v_min, const int64_t v_max,
+													const int64_t z_min, const int64_t z_max) {
+			assert(z_min > 0 || z_max < 0);
+			assert(v_min != 0 && v_max != 0);
+			// The product z cannot be 0. Then x and y cannot be 0, too.
+			// x >= ceil(z / y)
+			int64_t u_min_new = 0;
+			if (v_max < 0) {
+				// Integer variable v is negative
+				if (z_min > 0) {
+					// Integer variable z is positive
+					u_min_new = (z_max - v_max - 1) / v_max;
+				} else {
+					// Integer variable z is negative
+					u_min_new = (-z_max - v_min - 1) / -v_min;
+				}
+			} else if (v_min > 0) {
+				// Integer variable is positive
+				if (z_min > 0) {
+					// Integer variable z is positive
+					u_min_new = (z_min + v_max - 1) / v_max;
+				} else {
+					// Integer variable z is negative
+					u_min_new = (-z_min + v_min - 1) / -v_min;
+				}
+			} else {
+				// The domain of integer variable v contains -1 and 1
+				u_min_new = std::min(-1 * z_min, z_min);
+				u_min_new = std::min(u_min_new, z_max);
+				u_min_new = std::min(u_min_new, -1 * z_max);
+			}
+
+			if (u_min_new > u.getMin()) {
 				// TODO Better explanation
 				Clause* reason = nullptr;
 				if (so.lazy) {
@@ -362,148 +479,55 @@ public:
 					(*reason)[3] = z.getMinLit();
 					(*reason)[4] = z.getMaxLit();
 				}
-				setDom(u, setMin, 0, reason);
-				setDom(u, setMax, 0, reason);
+				setDom(u, setMin, (u_min_new == 0 ? 1 : u_min_new), reason);
 			}
-		} else if (z_min > 0) {
-			if (v_min == 0) {
+
+			return true;
+		}
+
+		template <int U, int V>
+		bool propagate_xy_max(IntView<U> u, IntView<V> v, const int64_t v_min, const int64_t v_max,
+													const int64_t z_min, const int64_t z_max) {
+			assert(z_min > 0 || z_max < 0);
+			assert(v_min != 0 && v_max != 0);
+			// The product z cannot be 0. Then x and y cannot be 0, too.
+			// u <= floor(z / v)
+			int64_t u_max_new = 0;
+			if (v_min < 0 && v_max > 0) {
+				// The domain of integer variable v contains -1 and 1
+				u_max_new = std::max(-1 * z_min, z_min);
+				u_max_new = std::max(u_max_new, z_max);
+				u_max_new = std::max(u_max_new, -1 * z_max);
+			} else {
+				u_max_new = (v_max < 0 ? z_min : z_max) / (z_min > 0 ? v_min : v_max);
+			}
+
+			if (u_max_new < u.getMax()) {
 				// TODO Better explanation
 				Clause* reason = nullptr;
 				if (so.lazy) {
-					reason = Reason_new(3);
-					(*reason)[1] = z.getMinLit();
-					(*reason)[2] = v.getMinLit();
-				}
-				setDom(v, setMin, 1, reason);
-			} else if (v_max == 0) {
-				// TODO Better explanation
-				Clause* reason = nullptr;
-				if (so.lazy) {
-					reason = Reason_new(3);
-					(*reason)[1] = z.getMinLit();
+					reason = Reason_new(5);
+					(*reason)[1] = v.getMinLit();
 					(*reason)[2] = v.getMaxLit();
+					(*reason)[3] = z.getMinLit();
+					(*reason)[4] = z.getMaxLit();
 				}
-				setDom(v, setMax, -1, reason);
-			} else {
-				if (!propagate_xy_min(u, v, v_min, v_max, z_min, z_max)) {
-					return false;
-				}
-				if (!propagate_xy_max(u, v, v_min, v_max, z_min, z_max)) {
-					return false;
-				}
+				setDom(u, setMax, (u_max_new == 0 ? -1 : u_max_new), reason);
 			}
-		} else if (z_max < 0) {
-			if (v_min == 0) {
-				// TODO Better explanation
-				Clause* reason = nullptr;
-				if (so.lazy) {
-					reason = Reason_new(3);
-					(*reason)[1] = z.getMaxLit();
-					(*reason)[2] = v.getMinLit();
-				}
-				setDom(v, setMin, 1, reason);
-			} else if (v_max == 0) {
-				// TODO Better explanation
-				Clause* reason = nullptr;
-				if (so.lazy) {
-					reason = Reason_new(3);
-					(*reason)[1] = z.getMaxLit();
-					(*reason)[2] = v.getMaxLit();
-				}
-				setDom(v, setMax, -1, reason);
-			} else {
-				if (!propagate_xy_min(u, v, v_min, v_max, z_min, z_max)) {
-					return false;
-				}
-				if (!propagate_xy_max(u, v, v_min, v_max, z_min, z_max)) {
-					return false;
-				}
-			}
-		}
-		return true;
-	}
 
-	template <int U, int V>
-	bool propagate_xy_min(IntView<U> u, IntView<V> v, const int64_t v_min, const int64_t v_max,
-												const int64_t z_min, const int64_t z_max) {
-		assert(z_min > 0 || z_max < 0);
-		assert(v_min != 0 && v_max != 0);
-		// The product z cannot be 0. Then x and y cannot be 0, too.
-		// x >= ceil(z / y)
-		int64_t u_min_new = 0;
-		if (v_max < 0) {
-			// Integer variable v is negative
-			if (z_min > 0) {
-				// Integer variable z is positive
-				u_min_new = (z_max - v_max - 1) / v_max;
-			} else {
-				// Integer variable z is negative
-				u_min_new = (-z_max - v_min - 1) / -v_min;
-			}
-		} else if (v_min > 0) {
-			// Integer variable is positive
-			if (z_min > 0) {
-				// Integer variable z is positive
-				u_min_new = (z_min + v_max - 1) / v_max;
-			} else {
-				// Integer variable z is negative
-				u_min_new = (-z_min + v_min - 1) / -v_min;
-			}
-		} else {
-			// The domain of integer variable v contains -1 and 1
-			u_min_new = std::min(-1 * z_min, z_min);
-			u_min_new = std::min(u_min_new, z_max);
-			u_min_new = std::min(u_min_new, -1 * z_max);
+			return true;
 		}
 
-		if (u_min_new > u.getMin()) {
-			// TODO Better explanation
-			Clause* reason = nullptr;
-			if (so.lazy) {
-				reason = Reason_new(5);
-				(*reason)[1] = v.getMinLit();
-				(*reason)[2] = v.getMaxLit();
-				(*reason)[3] = z.getMinLit();
-				(*reason)[4] = z.getMaxLit();
-			}
-			setDom(u, setMin, (u_min_new == 0 ? 1 : u_min_new), reason);
+		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+			ints.emplace_back( val(x).value_or(INT_MAX) );
+			ints.emplace_back( val(y).value_or(INT_MAX) );
+			ints.emplace_back( val(z).value_or(INT_MAX) );
 		}
 
-		return true;
-	}
-
-	template <int U, int V>
-	bool propagate_xy_max(IntView<U> u, IntView<V> v, const int64_t v_min, const int64_t v_max,
-												const int64_t z_min, const int64_t z_max) {
-		assert(z_min > 0 || z_max < 0);
-		assert(v_min != 0 && v_max != 0);
-		// The product z cannot be 0. Then x and y cannot be 0, too.
-		// u <= floor(z / v)
-		int64_t u_max_new = 0;
-		if (v_min < 0 && v_max > 0) {
-			// The domain of integer variable v contains -1 and 1
-			u_max_new = std::max(-1 * z_min, z_min);
-			u_max_new = std::max(u_max_new, z_max);
-			u_max_new = std::max(u_max_new, -1 * z_max);
-		} else {
-			u_max_new = (v_max < 0 ? z_min : z_max) / (z_min > 0 ? v_min : v_max);
+	protected:
+		std::vector<int> scope() const override {
+			return std::vector<int>{ x.var->var_id, y.var->var_id, z.var->var_id };
 		}
-
-		if (u_max_new < u.getMax()) {
-			// TODO Better explanation
-			Clause* reason = nullptr;
-			if (so.lazy) {
-				reason = Reason_new(5);
-				(*reason)[1] = v.getMinLit();
-				(*reason)[2] = v.getMaxLit();
-				(*reason)[3] = z.getMinLit();
-				(*reason)[4] = z.getMaxLit();
-			}
-			setDom(u, setMax, (u_max_new == 0 ? -1 : u_max_new), reason);
-		}
-
-		return true;
-	}
 };
 
 //-----
@@ -511,18 +535,26 @@ public:
 // x * y = z     x, y, z >= 0
 
 template <int U = 0, int V = 0, int W = 0>
-class Times : public Propagator, public Checker {
+class Times : public EquivalenceConstraint, public Checker {
 public:
 	IntView<U> x;
 	IntView<V> y;
 	IntView<W> z;
 
-	Times(IntView<U> _x, IntView<V> _y, IntView<W> _z) : x(_x), y(_y), z(_z) {
+	Times(IntView<U> _x, IntView<V> _y, IntView<W> _z) : EquivalenceConstraint(3), x(_x), y(_y), z(_z) {
 		priority = 1;
 		assert(x.getMin() >= 0 && y.getMin() >= 0 && z.getMin() >= 0);
-		x.attach(this, 0, EVENT_LU);
-		y.attach(this, 1, EVENT_LU);
-		z.attach(this, 2, EVENT_LU);
+		x.attach(this, 0, EVENT_LU | EVENT_F);
+		y.attach(this, 1, EVENT_LU | EVENT_F);
+		z.attach(this, 2, EVENT_LU | EVENT_F);
+	}
+
+	void wakeup(int /*i*/, int c) override {
+		if ( ( c & x.getEvent(EVENT_LU) ) != 0 || ( c & y.getEvent(EVENT_LU) ) != 0 || ( c & z.getEvent(EVENT_LU) ) != 0 ) {
+			pushInQueue();
+		}
+
+		if ( (c & EVENT_F) != 0 ) { fixed++; }
 	}
 
 	bool propagate() override {
@@ -564,6 +596,17 @@ public:
 	}
 
 	bool check() override { return (x.getShadowVal() * y.getShadowVal() == z.getShadowVal()); }
+
+	void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+		ints.emplace_back( val(x).value_or(INT_MAX) );
+		ints.emplace_back( val(y).value_or(INT_MAX) );
+		ints.emplace_back( val(z).value_or(INT_MAX) );
+	}
+
+protected:
+	std::vector<int> scope() const override {
+		return std::vector<int>{ x.var->var_id, y.var->var_id, z.var->var_id };
+	}
 };
 
 int get_sign(IntVar* x) {
@@ -610,18 +653,26 @@ void int_times(IntVar* x, IntVar* y, IntVar* z) {
 // floor(x / y) = z  <=>  ceil(x+1 / y) = z+1
 
 template <int U = 0, int V = 0, int W = 0>
-class Divide : public Propagator, public Checker {
+class Divide : public EquivalenceConstraint, public Checker {
 public:
 	IntView<U> x;
 	IntView<V> y;
 	IntView<W> z;
 
-	Divide(IntView<U> _x, IntView<V> _y, IntView<W> _z) : x(_x), y(_y), z(_z) {
+	Divide(IntView<U> _x, IntView<V> _y, IntView<W> _z) : EquivalenceConstraint(3), x(_x), y(_y), z(_z) {
 		priority = 1;
 		assert(x.getMin() >= 0 && y.getMin() >= 1 && z.getMin() >= 0);
-		x.attach(this, 0, EVENT_LU);
-		y.attach(this, 1, EVENT_LU);
-		z.attach(this, 2, EVENT_LU);
+		x.attach(this, 0, EVENT_LU | EVENT_F);
+		y.attach(this, 1, EVENT_LU | EVENT_F);
+		z.attach(this, 2, EVENT_LU | EVENT_F);
+	}
+
+	void wakeup(int /*i*/, int c) override {
+		if ( ( c & x.getEvent(EVENT_LU) ) != 0 || ( c & y.getEvent(EVENT_LU) ) != 0 || ( c & z.getEvent(EVENT_LU) ) != 0 ) {
+			pushInQueue();
+		}
+
+		if ( (c & EVENT_F) != 0 ) { fixed++; }
 	}
 
 	bool propagate() override {
@@ -659,6 +710,17 @@ public:
 		auto ceil_div = [](int64_t x, int64_t y) { return (x + (y - 1)) / y; };
 		return ceil_div(x.getShadowVal(), y.getShadowVal()) == z.getShadowVal();
 	}
+
+	void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+		ints.emplace_back( val(x).value_or(INT_MAX) );
+		ints.emplace_back( val(y).value_or(INT_MAX) );
+		ints.emplace_back( val(z).value_or(INT_MAX) );
+	}
+
+protected:
+	std::vector<int> scope() const override {
+		return std::vector<int>{ x.var->var_id, y.var->var_id, z.var->var_id };
+	}
 };
 
 // z = floor(x / y)
@@ -693,49 +755,74 @@ void int_mod(IntVar* /*x*/, IntVar* /*y*/, IntVar* /*z*/) { CHUFFED_ERROR("Not y
 // z = min(x, y)
 
 template <int U>
-class Min2 : public Propagator, public Checker {
-public:
-	IntView<U> x, y, z;
+class Min2 : public DominanceConstraint, public Checker {
+	private:
+		Tint64_t min_fixed;
+		Tint64_t z_fixed;
 
-	Min2(IntView<U> _x, IntView<U> _y, IntView<U> _z) : x(_x), y(_y), z(_z) {
-		priority = 1;
-		x.attach(this, 0, EVENT_LU);
-		y.attach(this, 1, EVENT_LU);
-		z.attach(this, 2, EVENT_L);
-	}
+	public:
+		IntView<U> x, y, z;
 
-	bool propagate() override {
-		// make a less than or equal to min(max(b_i))
-
-		setDom(z, setMax, x.getMax(), x.getMaxLit());
-		setDom(z, setMax, y.getMax(), y.getMaxLit());
-
-		const int64_t m = (x.getMin() < y.getMin() ? x.getMin() : y.getMin());
-		setDom(z, setMin, m, x.getFMinLit(m), y.getFMinLit(m));
-
-		setDom(x, setMin, z.getMin(), z.getMinLit());
-		setDom(y, setMin, z.getMin(), z.getMinLit());
-
-		if (z.getMin() == x.getMax() || z.getMin() == y.getMax()) {
-			satisfied = true;
+		Min2(IntView<U> _x, IntView<U> _y, IntView<U> _z) : DominanceConstraint(3), x(_x), y(_y), z(_z), min_fixed(INT_MAX), z_fixed(INT_MAX) {
+			priority = 1;
+			x.attach(this, 0, EVENT_LU | EVENT_F);
+			y.attach(this, 1, EVENT_LU | EVENT_F);
+			z.attach(this, 2, EVENT_L | EVENT_F);
 		}
 
-		return true;
-	}
+		void wakeup(int i, int c) override {
+			if ( ( c & x.getEvent(EVENT_LU) ) != 0 || ( c & y.getEvent(EVENT_LU) ) != 0 || ( c & z.getEvent(EVENT_L) ) != 0 ) { pushInQueue(); }
 
-	bool check() override {
-		return ((int)std::min(x.getShadowVal(), y.getShadowVal()) == z.getShadowVal());
-	}
+			if ( (c & EVENT_F) != 0 ) {
+				++fixed;
 
-	int checkSatisfied() override {
-		if (satisfied) {
-			return 1;
+				if ( i == 0 && x.getVal() < min_fixed ) { min_fixed = x.getVal(); }
+				if ( i == 1 && y.getVal() < min_fixed ) { min_fixed = y.getVal(); }
+				if ( i == 2 ) { z_fixed = z.getVal(); }
+			}
 		}
-		if (z.getMin() == x.getMax() || z.getMin() == y.getMax()) {
-			satisfied = true;
+
+		bool propagate() override {
+			// make a less than or equal to min(max(b_i))
+
+			setDom(z, setMax, x.getMax(), x.getMaxLit());
+			setDom(z, setMax, y.getMax(), y.getMaxLit());
+
+			const int64_t m = (x.getMin() < y.getMin() ? x.getMin() : y.getMin());
+			setDom(z, setMin, m, x.getFMinLit(m), y.getFMinLit(m));
+
+			setDom(x, setMin, z.getMin(), z.getMinLit());
+			setDom(y, setMin, z.getMin(), z.getMinLit());
+
+			if (z.getMin() == x.getMax() || z.getMin() == y.getMax()) {
+				satisfied = true;
+			}
+
+			return true;
 		}
-		return 3;
-	}
+
+		bool check() override {
+			return ((int)std::min(x.getShadowVal(), y.getShadowVal()) == z.getShadowVal());
+		}
+
+		int checkSatisfied() override {
+			if (satisfied) {
+				return 1;
+			}
+			if (z.getMin() == x.getMax() || z.getMin() == y.getMax()) {
+				satisfied = true;
+			}
+			return 3;
+		}
+
+		std::unique_ptr<DomConstraintKey> projectionKey() const override {
+			return std::make_unique<CMinimum>( CMinimum( prop_id, z_fixed, min_fixed ) );
+		}
+
+	protected:
+		std::vector<int> scope() const override {
+			return std::vector<int>{ x.var->var_id, y.var->var_id, z.var->var_id };
+		}
 };
 
 void int_min(IntVar* x, IntVar* y, IntVar* z) {

@@ -1,147 +1,76 @@
-# Chuffed, a lazy clause generation solver 
+# Chuffed with Caching
 
-Geoffrey Chu, Peter J. Stuckey, Andreas Schutt, Thorsten Ehlers, Graeme Gange, Kathryn Francis
-
-Data61, CSIRO, Australia
-
-Department of Computing and Information Systems
-University of Melbourne, Australia
+A clone of version 0.13.2 of [Chuffed](https://github.com/chuffed/chuffed) to which a caching option has been added to exploit subproblem dominance as defined by Chu et al [1]. The code is a clone of the corresponding branch of the original repository with full history to make it easier to integrate any future changes from the original repository into this version of Chuffed.
 
 ## Usage
 
-The easiest way to use Chuffed is as a backend to the [MiniZinc constraint modelling language](http://www.minizinc.org). Compiling Chuffed using the
-instructions below will create the `fzn-chuffed` executable that can interpret
-MiniZinc's FlatZinc solver language.
+The Dockerfile defines a build environment that can be used to compile the project and a runtime environment that can be used to run the executable obtained from the compilation step.
 
-You can also use Chuffed directly from C++. Take a look at the files in the
-`examples` folder to get started.
+First, create the build environment: 
 
-### Assumption interface
-Chuffed has FlatZinc hooks to the internal assumption handling. By adding an
-`assume(array [int] of var bool)` annotation to a solve item, the specified Booleans
-will be treated as assumptions. This annotation can be used when chuffed's solver
-specific definitions are included (i.e., by adding `include "chuffed.mzn";` to your
-MiniZinc model).
+`docker build --target build-env -t cmake .`.
 
-If the resulting problem is unsatisfiable (or the optimum is found), the solver will
-print a valid -- though not necessarily minimal -- nogood in terms of assumptions
-(and, for optimization instances, an objective bound).
+The `cmake` container can then be used to compile the project:
 
-### Integration with CP Profiler
+`docker run -v /mnt/chuffed/:/mnt/chuffed/ -w /mnt/chuffed/ cmake /bin/bash -c "mkdir -p build && cd build && cmake .. && cmake --build ."`.
 
-The *CP Profiler*, integrated into the
-[MiniZincIDE](https://github.com/MiniZinc/MiniZincIDE), can be used with Chuffed
-to visualise the search trees and analyse the nogoods that Chuffed explores when
-solving a problem. In order to enable profiling support, Chuffed includes
-profiler connection code. This has been included as a git subtree in
-`thirdparty/cp-profiler-integration`. To pull the newest version of the
-integration code, use the following command in the repository root.
+Once the project has been compiled and the executable is available in the build directory, the solver can be executed:
 
-```
-git subtree pull --prefix thirdparty/cp-profiler-integration https://github.com/MiniZinc/cpp-integration.git master --squash
-```
+`docker run -v /mnt/chuffed/:/mnt/chuffed/ -v /mnt/minizinc/:/mnt/minizinc/:ro -w /mnt/chuffed/build/ cmake ./fzn-chuffed [option] [fzn file]`.
 
-## Compilation
+The bind mounts and paths should be adjusted as necessary (`/mnt/chuffed/` points to the top level directory and `/mnt/minizinc/` to the directory that contains the FlatZinc problems).
 
-Chuffed can be compiled on Windows, macOS and Linux.
+## Caching Options
 
-#### Prerequisites
+`--caching [on|off]` enables or disables caching (the default is `off`).
 
-You need a recent C++ compiler that supports C++11 (e.g. Microsoft Visual Studio
-2013, gcc 4.8, clang), as well as the CMake build tool (at least version 3.1).
-To automatically format the Chuffed source code, the `clang-format` executable
-must be available.
+`--variable-dominance-check [on|off]` controls whether the domains of the unfixed variables are included in the equivalence part (`off`) or the dominance part (`on`) of the projection key (the default is `off`).
 
-#### CMake & Co
+`--cache-strategy [unbounded|random|lru|fifo|threshold|event]` the strategy to use for managing the cache (the default is `unbounded`).
 
-To initialize the CMake build environment, using `build` as the build directory,
-use the following command:
+`--cache-size <n>` an integer specifying the maximum size of the cache (the default is `-1`). Only used for `--cache-strategy [random|lru|fifo]`.
 
-    cmake -B build -S .
+`--prune-size <n>>` an integer specifying the number of entries that are removed from the cache when the maximum cache size is reached (the default is `0`). Only used for `--cache-strategy [random|lru|fifo]`.
 
-To then build the `fzn-chuffed` executable run:
+`--prune-interval <n>` the interval, expressed as the number of nodes developed, with which entries are pruned from the cache (the default is `0`). Only used for `--cache-strategy threshold`.
 
-    cmake --build build
+`--prune-threshold <n>` when pruning is triggered, entries that have not resulted in a cache hit for more than `n` iterations are removed (the default is `1000`). Only used for `--cache-strategy threshold`.
 
-To install `fzn-chuffed` run the following command: 
+`--cache-event-out <file>` a path to the file in which the cache-related events are stored (the default is `./events.csv`). Only used when recording cache events is enabled, which is the case for the `fzn-chuffed-cache-events` executable.
 
-    cmake --build build --target install
-    
-The installation directory can be chosen by appending
-`-DCMAKE_INSTALL_PREFIX=$LOCATION` with the chosen location to the initial CMake
-command.
+`--cache-events <file>` a path to a file that stores previously recorded cache events (the default is `""`). Only used for `--cache-strategy event`.
 
-To build the C++ examples:
+## Cache Hits
 
-    cmake --build build --target examples
+Problems without cache hits: pentominoes, speck-optimisation¹, table-layout¹, ...
 
-To format the Chuffed source files
+¹not all instances could be solved, e.g. because the solver did not have enough memory or because of other issues, but the ones that were solved did not have any cache hits.
 
-    cmake --build build --target format
+`elitserien`, `mrcpsp` have unsupported constraints, but lazy clause generation is already very efficient.
 
-## Description
+## Changes
 
-Chuffed is a state of the art lazy clause solver designed from the ground up
-with lazy clause generation in mind. Lazy clause generation is a hybrid
-approach to constraint solving that combines features of finite domain
-propagation and Boolean satisfiability. Finite domain propagation is
-instrumented to record the reasons for each propagation step. This creates an
-implication graph like that built by a SAT solver, which may be used to create
-efficient nogoods that record the reasons for failure. These nogoods can be
-propagated efficiently using SAT unit propagation technology. The resulting
-hybrid system combines some of the advantages of finite domain constraint
-programming (high level model and programmable search) with some of the
-advantages of SAT solvers (reduced search by nogood creation, and effective
-autonomous search using variable activities).
+The largest part of the caching-related code can be found in the [caching](./chuffed/caching) subdirectory. However, adding support for caching also required a number of existing files to be modified. In particular, the propagators have been extended and modified to make it possible to include their representations in the projection keys. These modifications include attaching additional events to the variables, adjusting the `wakeup` method to update the internal state of the propagator (or the parent class), and keeping track of internal state relevant to the projection key representation. Attaching additional events to propagators requires care in terms of adjusting the `wakeup` method, as these often change the internal state of the propagator. Triggering additional calls to this method may result in incorrect behaviour. As such, it is important to ensure that such changes are only applied when the originally attached events are triggered and not when the additional events are triggered. It is also important to note that for BoolView variables, the change variable passed to the `wakeup` method is always zero, which means that it is not possible to rely on the change events. The following provides an overview of the files that have changed and the reason for the change.
 
-The FD components of Chuffed are very tightly integrated with a SAT solver. For
-"small" variables (|D| <= 1000), SAT variables representing [x = v] or [x >= v]
-are eagerly created at the start of the problem. Channelling constraints are
-natively enforced by the variable objects in order to keep the FD solver and
-the SAT solver's view of the domains fully consistent at all times. For "large"
-variables (|D| > 1000), the SAT variables are lazily generated as needed. Every
-propagator in Chuffed has been instrumented so that all propagation can be
-explained by some combination of the literals in the SAT solver. An explanation
-is of the form a_1 /\ ... /\ a_n -> d, where a_i represent domain restrictions
-which are currently true, and d represents the domain change that is implied.
-e.g. Suppose z >= x + y, and we have x >= 3, y >= 2. Then the propagator would
-propagate z >= 5 with explanation clause x >= 3 /\ y >= 2 -> z >= 5.
+* [engine.h](./chuffed/core/engine.h) Several class members and methods have been added that are used to keep track of subproblems, add them to the cache when encountering a conflict, and search the cache for dominating subproblems.
+* [engine.cpp](./chuffed/core/engine.cpp) The search loop has been modified to use the cache to search for dominating subproblems. The backtracking function has been adjusted so that it adds subproblems that have been fully explored to the cache. The solve method checks caching support for all constraints that occur in a problem.
+* [init.cpp](./chuffed/core/init.cpp) The functions that initialise the propagators have been moved to the top to ensure that [check why]. A block has also been added to initialise the cache.
+* [options.h](./chuffed/core/options.h) Several options related to caching have been added. See below for more details. Lazy and learn default to false.
+* [options.cpp](./chuffed/core/options.cpp) Added cases to parse the caching options.
+* [propagator.h](./chuffed/core/propagator.h) Added a Boolean value that indicates whether the propagator supports caching along with functions to enable and check caching support. These are convenience methods that make it easier to identify propagators for which caching support has not been added, which is needed to ensure that the solver does not run with such propagators while caching is enabled, as that may result in incorrect behaviour.
+* [stats.cpp](./chuffed/core/stats.cpp) Included caching-related stats, including the maximum memory consumption of the solver.
+* [int-var.h](./chuffed/vars/int-var.h) Enable INT_DOMAIN_LIST???
+* [arithmetic.cpp](./chuffed/primitives/arithmetic.cpp) The Abs propagator now extends the `CachingConstraint` class (which is a subclass of the `Propagator` class). Times, TimesAll, and Divide have been converted into an `EquivalenceConstraint`. Min2 has been turned into a `DominanceConstraint`.
+* [binary.cpp](./chuffed/primitives/binary.cpp) BinGE and BinNE have been converted into an `EquivalenceConstraint`.
+* [bool.cpp](./chuffed/primitives/bool.cpp) Boolean variables are added to the engine and special Boolean propagators are created for caching purposes.
+* [element.cpp](./chuffed/primitives/element.cpp) Add caching support???
+* [linear.cpp](./chuffed/primitives/linear.cpp) LinearGE has been converted into a `DominanceConstraint`. LinearNE has been converted into an `EquivalenceConstraint`.
+* [alldiff.cpp](./chuffed/global/alldif.cpp) AllDiffValue and AllDiffDomain have been converted into a `CachingConstraint`.
+* [linear-bool.cpp](./chuffed/global/linear-bool.cpp) BoolLinearLE has been converted into a `DominanceConstraint`.
+* [minimum.cpp](./chuffed/global/minimum.cpp) Minimum has been converted into a `DominanceConstraint`.
+* [table.cpp](./chuffed/global/table.cpp) Added special propagator for table constraints.
+* [mip.h](./chuffed/global/mip.h) Converted into a `CachingConstraint`. This propagator always exists, even though its usage needs to be enabled explicitly with a command line argument. (Using it with caching may not be correct, so it should not be enabled whenever caching is used.)
 
-The explanations for each propagation form an implication graph. This allows us
-to do three very important things. Firstly, we can derive a nogood to explain
-each failure. Such nogoods often allow us to avoid a very large amount of
-redundant work, thus producing search trees which are orders of magnitude
-smaller. Secondly, nogoods allow us to make informed choices about
-non-chronological back-jumping. When no literal from a decision level appears
-in the nogood, it is indicative of the fact that the decision made at that
-level was completely irrelevant to the search. Thus by back-jumping over such
-decisions, we retrospectively avoid making such bad decisions, and hopefully
-make good decisions instead which drive the search towards failure. Thirdly, by
-analysing the conflict, we can actively gain some information about what good
-decision choices are. The Variable State Independent Decaying Sum (VSIDS)
-heuristic is an extremely effective search heuristic for SAT problems, and is
-also extremely good for a range of CP problems. Each variables has an
-associated activity, which is increased whenever the variable is involved in
-the conflict. Variables with the highest activity is chosen as the decision
-variable at each node. The activities are decayed to reflect the fact that the
-set of important variables changes with time.
+## Bibliography
 
-Although Chuffed implements lazy clause generation, which is cutting edge and
-rather complex, the FD parts of Chuffed are relatively simple. In fact, it is
-quite minimalistic. Chuffed only supports 3 different propagator priorities.
-Chuffed implements a number of global propagators (alldiff, inverse,
-minimum, table, regular, mdd, cumulative, disjunctive, circuit, difference).
-It also only supports two kinds of integer variables. Small integer variables
-for which the domain is represented by a byte string.
-And large integer variables for which the domain is represented only by its
-upper and lower bound (no holes allowed). All boolean variables and boolean
-constraints are handled by the builtin SAT solver.
-
-Great pains have been taken to make everything as simple and efficient as
-possible. The solver, when run with lazy clause generation disabled, is
-somewhat comparable in speed with older versions of Gecode. The overhead from
-lazy clause generation ranges from negligible to perhaps around 100%. The
-search reduction, however, can reach orders of magnitude on appropriate
-problems. Thus lazy clause generation is an extremely important and useful
-technology. The theory behind lazy clause generation is described in much
-greater detail in various papers.
+[1] G. Chu, M. G. de la Banda, and P. J. Stuckey, ‘Exploiting subproblem dominance in constraint programming’, Constraints, vol. 17, no. 1, pp. 1–38, Jan. 2012, doi: 10.1007/s10601-011-9112-9.

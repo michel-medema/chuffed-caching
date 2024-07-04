@@ -13,6 +13,11 @@
 #include "chuffed/support/vec.h"
 #include "chuffed/vars/vars.h"
 
+// Caching.
+#include "chuffed/caching/propagators/Boolean.h"
+#include "chuffed/caching/cache/events/CacheEventStore.h"
+#include "chuffed/caching/keys/ProjectionKey.h"
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -30,7 +35,15 @@
 #include <string>
 #include <vector>
 
+// Caching.
+#include <memory>
+#include <typeinfo>
+#include <type_traits>
+#include <cxxabi.h>
+
 #ifdef HAS_PROFILER
+#include <memory>
+
 #include <thirdparty/cp-profiler-integration/connector.hpp>
 #include <thirdparty/cp-profiler-integration/message.hpp>
 #endif
@@ -42,6 +55,9 @@ uint64_t bit[65];
 Tint trail_inc;
 
 int nextnodeid = 0;
+
+// Caching.
+CacheEventStore eventStore;
 
 #ifdef HAS_PROFILER
 cpprofiler::Connector* profilerConnector;
@@ -214,7 +230,9 @@ Engine::Engine()
 			opt_time(duration::zero()),
 
 			output_stream(&std::cout),
-			solution_callback(nullptr)
+			solution_callback(nullptr),
+			cache( nullptr ),
+			stateBuilder( nullptr )
 #ifdef HAS_VAR_IMPACT
 			,
 			last_int(nullptr)
@@ -459,6 +477,28 @@ void Engine::clearPropState() {
 	}
 }
 
+void Engine::addStatesToCache( int newDecisionLevel ) {
+	// The decision level tip indicates how many nodes belong to the new decision level. These nodes are skipped,
+	// and all the subsequent nodes are added to the cache since these have been fully explored.
+	for ( auto it = nodepath.cbegin() + decisionLevelTip[newDecisionLevel]; it < nodepath.cend(); ++it ) {
+		auto searchState = searchStates.find( *it );
+
+		if ( searchState != searchStates.end() ) {
+			// The variable nextnodeid points to the ID of the next node, so one must be subtracted to get the value of the current node.
+			cache->insert( std::move( searchState->second ), nextnodeid - 1 );
+			searchStates.erase( searchState );
+		}
+	}
+}
+
+void Engine::addBool( BoolView b ) {
+	if ( b.getSign() ) {
+		this->booleans.insert( ~b );
+	} else {
+		this->booleans.insert( b );
+	}
+}
+
 void Engine::btToPos(int pos) {
 	for (int i = trail.size(); i-- > pos;) {
 		trail[i].undo();
@@ -484,6 +524,26 @@ void Engine::btToLevel(int level) {
 #ifdef HAS_VAR_IMPACT
 	last_int = nullptr;
 #endif
+
+	if ( so.caching ) {
+		if ( level == 0 ) {
+			// When the search backtracks to level 0, which is the root node, the search either restarts
+			// or has exhausted all options. In the latter case, there are no solutions so the search will end.
+			// A restart can occur after a certain number of conflicts or when a solution has been found for
+			// an optimisation problem. Since the search engine will create a new search tree after a restart,
+			// the old nodes will never be encountered again. However, because these nodes have not been
+			// exhaustively explored, they cannot be added to the cache.
+			searchStates.clear();
+
+#ifdef LOG_CACHE_EVENTS
+			eventStore.addEvent( CacheEvent(nextnodeid, CACHE_EVENTS::RESTART, 0) );
+#endif
+		} else {
+			// Normal backtrack triggered, and the exhaustively explored nodes from the previous levels
+			// can be added to the cache.
+			addStatesToCache( level );
+		}
+	}
 }
 
 void Engine::topLevelCleanUp() {
@@ -712,6 +772,27 @@ RESULT Engine::search(const std::string& problemLabel) {
 		const bool propResult = propagate();
 		const long timeus = 0;
 		//        long timeus = dur.total_microseconds();
+
+		if ( so.caching && nodeid == 0 ) {
+			// At the very first iteration, this object is created because the variables and propagators
+			// are now guaranteed to be initialised, and it allows for the initial propagation to be taken
+			// into consideration (i.e. if a variable is now fixed, it can be removed from the projection keys).
+			this->stateBuilder = std::make_unique<StateBuilder>( vars, booleans, opt_var, booleanConstraints, equivalenceConstraints, dominanceConstraints );
+		}
+
+		if ( so.verbosity >= 2 && nodeid % 5000 == 0 ) {
+			std::cerr << "Number of nodes: \t\t" << nodes << '\n';
+			std::cerr << "Number of conflicts: \t\t" << conflicts << '\n';
+			std::cerr << "Number of propagations: \t" << propagations << '\n';
+
+			if ( so.caching ) {
+				std::cerr << "Cache size: \t\t\t" << cache->size() << '\n';
+				std::cerr << "Cache keys: \t\t\t" << cache->numKeys() << '\n';
+				std::cerr << "Cache hits: \t\t\t" << cache->hits() << '\n';
+				std::cerr << "Nodepath length: \t\t\t" << nodepath.size() << '\n';
+			}
+		}
+
 		if (!propResult) {
 #if DEBUG_VERBOSE
 			std::cerr << "failure\n";
@@ -855,6 +936,11 @@ RESULT Engine::search(const std::string& problemLabel) {
 				sat.confl = nullptr;
 				DecInfo& di = dec_info.last();
 				sat.btToLevel(decisionLevel() - 1);
+
+				if ( so.caching ) {
+					rewindPaths( previousDecisionLevel, decisionLevel(), REWIND_OMIT_SKIPPED, timeus );
+				}
+
 #ifdef HAS_PROFILER
 				if (doProfiling()) {
 					rewindPaths(previousDecisionLevel, decisionLevel(),
@@ -1048,6 +1134,18 @@ RESULT Engine::search(const std::string& problemLabel) {
 				continue;
 			}
 
+			if ( so.caching ) {
+				ProjectionKey searchState( nodeid, previousDecisionLevel, stateBuilder->getEquivalencePart(), stateBuilder->getDominancePart() );
+
+				if ( cache->find( searchState, nodeid ).second ) {
+					// If the current state is in the cache, backtrack to the previous node.
+					delete di;
+					goto Conflict;
+				} else {
+					searchStates.insert( { nodeid, std::move( searchState ) } );
+				}
+			}
+
 			engine.dec_info.push(*di);
 			newDecisionLevel();
 
@@ -1122,6 +1220,34 @@ void Engine::solve(Problem* p, const std::string& problemLabel) {
 			learntStatsStream << ",nogood";
 		}
 		learntStatsStream << ",rawActivity\n";
+	}
+
+	if ( so.caching ) { // Ensure that all propagators support caching. Otherwise, the solution may be incorrect.
+		bool unsupported = false;
+		for ( int i = 0; i < propagators.size(); i++ ) {
+			Propagator *prop = propagators[i];
+
+			int status;
+			char *demangled = abi::__cxa_demangle( typeid( *prop ).name(), nullptr, nullptr, &status );
+
+			//std::cout << prop->prop_id << " - " << demangled << "\"." << std::endl;
+			//prop->print();
+
+			if ( !propagators[i]->supportsCaching() ) {
+				unsupported = true;
+				std::cout << "Caching enabled with unsupported constraint \"" << demangled << "\"." << std::endl;
+			}
+
+			// TODO: Could use this instead of modifying the propagator class.
+			/*if ( !dynamic_cast<CachingConstraint*>(prop) ) {
+					std::cout << "Caching enabled with unsupported constraint \"" << demangled << "\"." << std::endl;
+			}*/
+		}
+
+		if ( unsupported ) {
+			std::cout << "Constraints without support for caching found. Terminating." << std::endl;
+			exit( EXIT_FAILURE );
+		}
 	}
 
 	// sequential

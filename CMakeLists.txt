@@ -8,7 +8,7 @@ set(chuffed_VERSION_PATCH 2)
 
 ### Additional Definitions:
 option(STATIC "compile with the -static linker flag" OFF)
-option(CP_PROFILER "Build with the CP Profiler Integration" ON)
+option(CP_PROFILER "Build with the CP Profiler Integration" OFF)
 option(SUPPORT_VAR_IMPACT "Build with support for impact branching" OFF)
 # ------------- Compiler Configuration -------------
 
@@ -35,7 +35,8 @@ if(APPLE)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "10.9" CACHE STRING "Minimum OS X deployment version")
 endif(APPLE)
 
-set(CMAKE_CXX_STANDARD 11)
+# The minimum version should be 17, since it introduced std::make_unique.
+set(CMAKE_CXX_STANDARD 17)
 
 find_package(Threads)
 
@@ -74,6 +75,7 @@ add_library(thirdparty_murmur OBJECT
 set_target_properties(thirdparty_murmur PROPERTIES
   CXX_CLANG_TIDY ""
 )
+
 
 # ------------- Main Chuffed Definition -------------
 
@@ -189,6 +191,36 @@ add_library(chuffed
   chuffed/core/propagator.h
   ${VAR_IMPACT_SOURCES}
 
+  chuffed/caching/cache/UnboundedCache.h
+  chuffed/caching/keys/DominancePart.h
+  chuffed/caching/keys/EquivalencePart.h
+  chuffed/caching/keys/EquivalencePart.cpp
+  chuffed/caching/keys/VariableDomain.h
+  chuffed/caching/keys/VariableDomain.cpp
+  chuffed/caching/keys/constraints/DomConstraintKey.h
+  chuffed/caching/keys/constraints/CLinearLE.h
+  chuffed/caching/keys/constraints/CMinimum.h
+  chuffed/caching/propagators/Boolean.h
+  chuffed/caching/cache/events/CacheEventStore.h
+  chuffed/caching/keys/ProjectionKey.h
+  chuffed/caching/keys/StateBuilder.cpp
+  chuffed/caching/keys/StateBuilder.h
+  chuffed/caching/propagators/Table.h
+  chuffed/caching/cache/ICache.h
+
+  chuffed/caching/cache/EventCache_impl.h
+  chuffed/caching/cache/EventCache.h
+  chuffed/caching/cache/Threshold_impl.h
+  chuffed/caching/cache/Threshold.h
+  chuffed/caching/cache/BoundedCache.h
+  chuffed/caching/hash.h
+  chuffed/caching/key-size.h
+
+  chuffed/caching/cache/policies/EvictionPolicy.h
+  chuffed/caching/cache/policies/LeastRecentlyUsed.h
+  chuffed/caching/cache/policies/RandomReplacement.h
+  chuffed/caching/cache/policies/FIFO.h
+
   $<TARGET_OBJECTS:thirdparty_cp_profiler>
   $<TARGET_OBJECTS:thirdparty_murmur>
 )
@@ -196,6 +228,13 @@ add_library(chuffed
 if(CP_PROFILER)
   target_compile_definitions(chuffed PRIVATE HAS_PROFILER)
 endif()
+
+# ------------- Configure the logging of cache events -------------
+
+if (LOG_CACHE_EVENTS)
+  message("Enabling the logging of cache events.")
+  target_compile_definitions(chuffed PRIVATE LOG_CACHE_EVENTS)
+endif ()
 
 # ------------- FZN Chuffed -------------
 
@@ -438,3 +477,5 @@ if (CLANG_FORMAT_EXECUTABLE)
     COMMENT "Running ${CLANG_FORMAT_EXECUTABLE} on all source files"
   )
 endif()
+
+add_subdirectory(tests)

@@ -10,6 +10,10 @@
 #include <chrono>
 #include <cstdio>
 
+#ifdef linux
+#include <sys/resource.h>
+#endif
+
 void Engine::printStats() {
 	auto total_time = std::chrono::duration_cast<duration>(chuffed_clock::now() - start_time);
 	const duration search_time = total_time - init_time;
@@ -85,6 +89,30 @@ void Engine::printStats() {
 			engine.propagators[i]->printStats();
 		}
 	}
+
+#ifdef linux
+	struct rusage rusage;
+	getrusage(RUSAGE_SELF, &rusage);
+
+	//std::cout << rusage.ru_maxrss * 1024 << " bytes." << std::endl;
+	printf("%%%%%%mzn-stat: memUsage=%.2fMB\n", rusage.ru_maxrss / 1024.0);
+#endif
+
+	if (so.caching) {
+		printf("%%%%%%mzn-stat: cache-size=%lld\n", engine.cache->size());
+		printf("%%%%%%mzn-stat: cache-hits=%d\n", engine.cache->hits());
+		printf("%%%%%%mzn-stat: nr-of-cache-keys=%lld\n", engine.cache->numKeys());
+		printf("%%%%%%mzn-stat: max-cache-size=%lld\n", engine.cache->maxSize());
+		printf("%%%%%%mzn-stat: max-nr-of-cache-keys=%lld\n", engine.cache->maxKeys());
+		printf("%%%%%%mzn-stat: avg-key-size=%lld\n", ICache<EquivalencePart, DominancePart>::avgKeySize( *engine.cache ) );
+
+		/*size_t s = 0;
+		for ( auto const &state: engine.searchStates ) {
+			s = s + sizeof(state.first) + std::get<0>(state.second.equivalencePart.size()) + std::get<0>(state.second.dominancePart.size());
+		}
+		printf("%%%%%%mzn-stat: search-state-size=%lld\n", s);*/
+	}
+
 	printf("%%%%%%mzn-stat-end\n");
 }
 

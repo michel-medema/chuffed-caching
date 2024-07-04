@@ -4,6 +4,8 @@
 #include "chuffed/core/propagator.h"
 #include "chuffed/support/misc.h"
 
+#include "chuffed/caching/propagators/CachingConstraint.h"
+
 #include <map>
 #include <set>
 
@@ -26,7 +28,7 @@ struct BoundChange {
 	BoundChange(int _v, int _w, int _d) : v(_v), w(_w), d(_d) {}
 };
 
-class MIP : public Propagator {
+class MIP : public CachingConstraint {
 	enum SimplexStatus {
 		SIMPLEX_OPTIMAL,
 		SIMPLEX_GOOD_ENOUGH,

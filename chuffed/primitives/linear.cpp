@@ -11,6 +11,10 @@
 #include "chuffed/vars/int-view.h"
 #include "chuffed/vars/vars.h"
 
+#include "chuffed/caching/propagators/DominanceConstraint.h"
+#include "chuffed/caching/propagators/EquivalenceConstraint.h"
+#include "chuffed/caching/keys/constraints/CLinearLE.h"
+
 #include <cassert>
 #include <climits>
 #include <cstdint>
@@ -21,165 +25,207 @@
 // Only use scale and minus views. Absorb offsets into c.
 
 template <int S, int R = 0>
-class LinearGE : public Propagator {
-	vec<int> pos;
-	vec<IntView<2 * S> > x;
-	vec<IntView<2 * S + 1> > y;
-	const int c;
-	BoolView r;
+class LinearGE : public DominanceConstraint {
+	private:
+		Tint64_t sum;
 
-	// persistent data
-	int fix{0};
-	int fix_x{0};
-	int fix_y{0};
-	int64_t fix_sum;
-	vec<Lit> ps;
+		vec<int> pos;
+		vec<IntView<2 * S> > x;
+		vec<IntView<2 * S + 1> > y;
+		const int c;
+		BoolView r;
 
-public:
-	LinearGE(vec<int>& a, vec<IntVar*>& _x, int _c, BoolView _r = bv_true)
-			: pos(_x.size()),
-				c(_c),
-				r(std::move(_r)),
+		// persistent data
+		int fix{0};
+		int fix_x{0};
+		int fix_y{0};
+		int64_t fix_sum;
+		vec<Lit> ps;
 
-				fix_sum(-c),
-				ps(R + _x.size()) {
-		priority = 2;
+	public:
+		LinearGE(vec<int>& a, vec<IntVar*>& _x, int _c, BoolView _r = bv_true)
+				: DominanceConstraint( _x.size() + 1 ), pos(_x.size()),
+					c(_c),
+					r(std::move(_r)),
 
-		for (int i = 0; i < _x.size(); i++) {
-			assert(a[i]);
-			if (a[i] > 0) {
-				pos[i] = x.size();
-				x.push(IntView<2 * S>(_x[i], a[i]));
-				_x[i]->attach(this, i, EVENT_U);
-			} else {
-				pos[i] = -y.size() - 1;
-				y.push(IntView<2 * S + 1>(_x[i], -a[i]));
-				_x[i]->attach(this, i, EVENT_L);
+					fix_sum(-c),
+					ps(R + _x.size()), sum(-_c) {
+			priority = 2;
+
+			for (int i = 0; i < _x.size(); i++) {
+				assert(a[i]);
+				if (a[i] > 0) {
+					pos[i] = x.size();
+					x.push(IntView<2 * S>(_x[i], a[i]));
+					_x[i]->attach(this, i, EVENT_U | EVENT_F);
+				} else {
+					pos[i] = -y.size() - 1;
+					y.push(IntView<2 * S + 1>(_x[i], -a[i]));
+					_x[i]->attach(this, i, EVENT_L | EVENT_F);
+				}
+			}
+			if (R != 0) {
+				r.attach(this, _x.size(), EVENT_L | EVENT_U);
+			}
+
+			if ( R == 0 ) { ++fixed; }
+			if ( !r.isFixed() ) { engine.addBool( r ); }
+			if ( R != 0 && r.isFalse() ) { satisfied = true; }
+		}
+
+		void wakeup(int i, int c) override {
+			if ( i >= pos.size() || ( pos[i] >= 0 && (c & x[pos[i]].getEvent(EVENT_U)) != 0 ) || ( pos[i] < 0 && (c & y[-pos[i] - 1].getEvent(EVENT_L)) != 0 ) ) {
+				if ((R == 0) || !r.isFalse()) {
+					pushInQueue();
+				}
+			}
+
+			if ( (c & EVENT_F) != 0 || i == pos.size() ) {
+				++fixed;
+
+				if ( i < pos.size() ) {
+					if ( pos[i] >= 0 ) { // x.
+						sum += x[pos[i]].getVal();
+					} else { // y.
+						sum += y[-pos[i] - 1].getVal();
+					}
+				} else {
+					if ( R != 0 && r.isFalse() ) { satisfied = true; }
+				}
 			}
 		}
-		if (R != 0) {
-			r.attach(this, _x.size(), EVENT_L);
-		}
-	}
 
-	void wakeup(int /*i*/, int /*c*/) override {
-		if ((R == 0) || !r.isFalse()) {
-			pushInQueue();
-		}
-	}
+		bool propagate() override {
+			if ((R != 0) && r.isFalse()) {
+				return true;
+			}
 
-	bool propagate() override {
-		if ((R != 0) && r.isFalse()) {
+			int64_t max_sum = fix_sum;
+
+			for (int i = fix_x; i < x.size(); i++) {
+				max_sum += x[i].getMax();
+			}
+			for (int i = fix_y; i < y.size(); i++) {
+				max_sum += y[i].getMax();
+			}
+
+			//		if (R && max_sum < 0) setDom2(r, setVal, 0, x.size()+y.size());
+
+			if ((R != 0) && max_sum < 0) {
+				const int64_t v = 0;
+				if (r.setValNotR(v != 0)) {
+					Reason expl;
+					if (so.lazy) {
+						for (int j = 0; j < x.size(); j++) {
+							ps[j + 1] = x[j].getMaxLit();
+						}
+						for (int j = 0; j < y.size(); j++) {
+							ps[j + 1 + x.size()] = y[j].getMaxLit();
+						}
+						expl = Reason_new(ps);
+					}
+					if (!r.setVal(v != 0, expl)) {
+						return false;
+					}
+				}
+			}
+
+			if ((R != 0) && !r.isTrue()) {
+				return true;
+			}
+
+			//		for (int i = fix_x; i < x.size(); i++) {
+			//			setDom2(x[i], setMin, x[i].getMax()-max_sum, i);
+			//		}
+
+			//		for (int i = fix_y; i < y.size(); i++) {
+			//			setDom2(y[i], setMin, y[i].getMax()-max_sum, x.size()+i);
+			//		}
+
+			for (int i = fix_x; i < x.size(); i++) {
+				const int64_t v = x[i].getMax() - max_sum;
+				if (x[i].setMinNotR(v)) {
+					Reason expl;
+					if (so.lazy) {
+						if ((R != 0) && r.isFixed()) {
+							ps[0] = r.getValLit();
+						}
+						for (int j = 0; j < x.size(); j++) {
+							ps[j + R] = x[j].getMaxLit();
+						}
+						for (int j = 0; j < y.size(); j++) {
+							ps[j + R + x.size()] = y[j].getMaxLit();
+						}
+						ps[R + i] = ps[0];
+						expl = Reason_new(ps);
+					}
+					if (!x[i].setMin(v, expl)) {
+						return false;
+					}
+				}
+			}
+
+			for (int i = fix_y; i < y.size(); i++) {
+				const int64_t v = y[i].getMax() - max_sum;
+				if (y[i].setMinNotR(v)) {
+					Reason expl;
+					if (so.lazy) {
+						if ((R != 0) && r.isFixed()) {
+							ps[0] = r.getValLit();
+						}
+						for (int j = 0; j < x.size(); j++) {
+							ps[j + R] = x[j].getMaxLit();
+						}
+						for (int j = 0; j < y.size(); j++) {
+							ps[j + R + x.size()] = y[j].getMaxLit();
+						}
+						ps[R + x.size() + i] = ps[0];
+						expl = Reason_new(ps);
+					}
+					if (!y[i].setMin(v, expl)) {
+						return false;
+					}
+				}
+			}
+
 			return true;
 		}
 
-		int64_t max_sum = fix_sum;
-
-		for (int i = fix_x; i < x.size(); i++) {
-			max_sum += x[i].getMax();
-		}
-		for (int i = fix_y; i < y.size(); i++) {
-			max_sum += y[i].getMax();
-		}
-
-		//		if (R && max_sum < 0) setDom2(r, setVal, 0, x.size()+y.size());
-
-		if ((R != 0) && max_sum < 0) {
-			const int64_t v = 0;
-			if (r.setValNotR(v != 0)) {
-				Reason expl;
-				if (so.lazy) {
-					for (int j = 0; j < x.size(); j++) {
-						ps[j + 1] = x[j].getMaxLit();
-					}
-					for (int j = 0; j < y.size(); j++) {
-						ps[j + 1 + x.size()] = y[j].getMaxLit();
-					}
-					expl = Reason_new(ps);
-				}
-				if (!r.setVal(v != 0, expl)) {
-					return false;
-				}
+		Clause* explain(Lit /*p*/, int inf_id) override {
+			if (inf_id == x.size() + y.size()) {
+				inf_id = -1;
 			}
-		}
-
-		if ((R != 0) && !r.isTrue()) {
-			return true;
-		}
-
-		//		for (int i = fix_x; i < x.size(); i++) {
-		//			setDom2(x[i], setMin, x[i].getMax()-max_sum, i);
-		//		}
-
-		//		for (int i = fix_y; i < y.size(); i++) {
-		//			setDom2(y[i], setMin, y[i].getMax()-max_sum, x.size()+i);
-		//		}
-
-		for (int i = fix_x; i < x.size(); i++) {
-			const int64_t v = x[i].getMax() - max_sum;
-			if (x[i].setMinNotR(v)) {
-				Reason expl;
-				if (so.lazy) {
-					if ((R != 0) && r.isFixed()) {
-						ps[0] = r.getValLit();
-					}
-					for (int j = 0; j < x.size(); j++) {
-						ps[j + R] = x[j].getMaxLit();
-					}
-					for (int j = 0; j < y.size(); j++) {
-						ps[j + R + x.size()] = y[j].getMaxLit();
-					}
-					ps[R + i] = ps[0];
-					expl = Reason_new(ps);
-				}
-				if (!x[i].setMin(v, expl)) {
-					return false;
-				}
+			if ((R != 0) && r.isFixed()) {
+				ps[0] = r.getValLit();
 			}
-		}
-
-		for (int i = fix_y; i < y.size(); i++) {
-			const int64_t v = y[i].getMax() - max_sum;
-			if (y[i].setMinNotR(v)) {
-				Reason expl;
-				if (so.lazy) {
-					if ((R != 0) && r.isFixed()) {
-						ps[0] = r.getValLit();
-					}
-					for (int j = 0; j < x.size(); j++) {
-						ps[j + R] = x[j].getMaxLit();
-					}
-					for (int j = 0; j < y.size(); j++) {
-						ps[j + R + x.size()] = y[j].getMaxLit();
-					}
-					ps[R + x.size() + i] = ps[0];
-					expl = Reason_new(ps);
-				}
-				if (!y[i].setMin(v, expl)) {
-					return false;
-				}
+			for (int i = 0; i < x.size(); i++) {
+				ps[i + R] = x[i].getMaxLit();
 			}
+			for (int i = 0; i < y.size(); i++) {
+				ps[i + R + x.size()] = y[i].getMaxLit();
+			}
+			ps[R + inf_id] = ps[0];
+			return Reason_new(ps);
 		}
 
-		return true;
-	}
+		std::unique_ptr<DomConstraintKey> projectionKey() const override {
+			return std::make_unique<CLinearLE>( CLinearLE(prop_id, sum, r.isTrue()) );
+		}
 
-	Clause* explain(Lit /*p*/, int inf_id) override {
-		if (inf_id == x.size() + y.size()) {
-			inf_id = -1;
+	protected:
+		std::vector<int> scope() const override {
+			std::vector<int> scope;
+			scope.reserve( x.size() + y.size() );
+
+			for (int i = 0; i < x.size(); i++) {
+				scope.push_back(x[i].var->var_id);
+			}
+			for (int i = 0; i < y.size(); i++) {
+				scope.push_back(y[i].var->var_id);
+			}
+
+			return scope;
 		}
-		if ((R != 0) && r.isFixed()) {
-			ps[0] = r.getValLit();
-		}
-		for (int i = 0; i < x.size(); i++) {
-			ps[i + R] = x[i].getMaxLit();
-		}
-		for (int i = 0; i < y.size(); i++) {
-			ps[i + R + x.size()] = y[i].getMaxLit();
-		}
-		ps[R + inf_id] = ps[0];
-		return Reason_new(ps);
-	}
 };
 
 //-----
@@ -187,7 +233,7 @@ public:
 // sum x_i != c <- r
 
 template <int U, int V, int R = 0>
-class LinearNE : public Propagator {
+class LinearNE : public EquivalenceConstraint {
 	int sp;
 	const int sz;
 	IntView<U>* x;
@@ -200,114 +246,140 @@ class LinearNE : public Propagator {
 	Tint num_unfixed;
 	Tint64_t sum_fixed;
 
-public:
-	LinearNE(vec<int>& a, vec<IntVar*>& _x, int _c, BoolView _r = bv_true)
-			: sz(_x.size()), c(_c), r(std::move(_r)), num_unfixed(sz), sum_fixed(-c) {
-		vec<IntView<0> > w;
-		for (int i = 0; i < a.size(); i++) {
-			if (a[i] >= 0) {
-				w.push(IntView<0>(_x[i], a[i]));
+	public:
+		LinearNE(vec<int>& a, vec<IntVar*>& _x, int _c, BoolView _r = bv_true)
+				: EquivalenceConstraint( _x.size() + 1 ), sz(_x.size()), c(_c), r(std::move(_r)),
+					num_unfixed(sz), sum_fixed(-c) {
+			vec<IntView<0> > w;
+			for (int i = 0; i < a.size(); i++) {
+				if (a[i] >= 0) {
+					w.push(IntView<0>(_x[i], a[i]));
+				}
+			}
+			sp = w.size();
+			for (int i = 0; i < a.size(); i++) {
+				if (a[i] < 0) {
+					w.push(IntView<0>(_x[i], -a[i]));
+				}
+			}
+			x = (IntView<U>*)(IntView<0>*)w;
+			y = (IntView<V>*)(IntView<0>*)w;
+			w.release();
+
+			for (int i = 0; i < sz; i++) {
+				x[i].attach(this, i, EVENT_F);
+			}
+			if (R != 0) {
+				r.attach(this, sz, EVENT_L | EVENT_U);
+			}
+			//		printf("LinearNE: %d %d %d %d %d\n", sp, sz, U, V, R);
+
+			if ( R == 0 ) { ++fixed; }
+
+			if ( !r.isFixed() ) { engine.addBool(r); }
+			if ( R == 1 && r.isFalse() ) { satisfied = true; }
+		}
+
+		void wakeup(int i, int /*c*/) override {
+			fixed++;
+			if ( R != 0 && r.isFalse() ) { satisfied = true; }
+
+			if (i < sz) {
+				num_unfixed = num_unfixed - 1;
+				if (i < sp) {
+					sum_fixed = sum_fixed + x[i].getVal();
+				} else {
+					sum_fixed = sum_fixed + y[i].getVal();
+				}
+			}
+			if (num_unfixed > 1) {
+				return;
+			}
+			if ((R == 0) || r.isTrue() || (!r.isFixed() && num_unfixed == 0)) {
+				pushInQueue();
 			}
 		}
-		sp = w.size();
-		for (int i = 0; i < a.size(); i++) {
-			if (a[i] < 0) {
-				w.push(IntView<0>(_x[i], -a[i]));
+
+		bool propagate() override {
+			if ((R != 0) && r.isFalse()) {
+				return true;
 			}
-		}
-		x = (IntView<U>*)(IntView<0>*)w;
-		y = (IntView<V>*)(IntView<0>*)w;
-		w.release();
 
-		for (int i = 0; i < sz; i++) {
-			x[i].attach(this, i, EVENT_F);
-		}
-		if (R != 0) {
-			r.attach(this, sz, EVENT_L);
-		}
-		//		printf("LinearNE: %d %d %d %d %d\n", sp, sz, U, V, R);
-	}
+			assert(num_unfixed <= 1);
 
-	void wakeup(int i, int /*c*/) override {
-		if (i < sz) {
-			num_unfixed = num_unfixed - 1;
-			if (i < sp) {
-				sum_fixed = sum_fixed + x[i].getVal();
-			} else {
-				sum_fixed = sum_fixed + y[i].getVal();
+			if (num_unfixed == 0) {
+				if (sum_fixed == 0) {
+					Clause* m_r = nullptr;
+					if (so.lazy) {
+						m_r = Reason_new(sz + 1);
+						for (int i = 0; i < sz; i++) {
+							(*m_r)[i + 1] = x[i].getValLit();
+						}
+					}
+					return r.setVal(false, m_r);
+				}
+				return true;
 			}
-		}
-		if (num_unfixed > 1) {
-			return;
-		}
-		if ((R == 0) || r.isTrue() || (!r.isFixed() && num_unfixed == 0)) {
-			pushInQueue();
-		}
-	}
 
-	bool propagate() override {
-		if ((R != 0) && r.isFalse()) {
-			return true;
-		}
+			if ((R != 0) && !r.isTrue()) {
+				return true;
+			}
 
-		assert(num_unfixed <= 1);
+			assert(num_unfixed == 1);
 
-		if (num_unfixed == 0) {
-			if (sum_fixed == 0) {
+			int k = 0;
+			while (x[k].isFixed()) {
+				k++;
+			}
+			assert(k < sz);
+			for (int i = k + 1; i < sz; i++) {
+				assert(x[i].isFixed());
+			}
+
+			if ((k < sp && x[k].remValNotR(-sum_fixed)) || (k >= sp && y[k].remValNotR(-sum_fixed))) {
 				Clause* m_r = nullptr;
 				if (so.lazy) {
-					m_r = Reason_new(sz + 1);
-					for (int i = 0; i < sz; i++) {
+					m_r = Reason_new(sz + R);
+					for (int i = 0; i < k; i++) {
 						(*m_r)[i + 1] = x[i].getValLit();
 					}
+					for (int i = k + 1; i < sz; i++) {
+						(*m_r)[i] = x[i].getValLit();
+					}
+					if (R != 0) {
+						(*m_r)[sz] = r.getValLit();
+					}
 				}
-				return r.setVal(false, m_r);
+				if (k < sp) {
+					if (!x[k].remVal(-sum_fixed, m_r)) {
+						return false;
+					}
+				} else {
+					if (!y[k].remVal(-sum_fixed, m_r)) {
+						return false;
+					}
+				}
 			}
+
 			return true;
 		}
 
-		if ((R != 0) && !r.isTrue()) {
-			return true;
+		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+			ints.emplace_back( sum_fixed );
+			bools.emplace_back( r.isTrue() );
 		}
 
-		assert(num_unfixed == 1);
+	protected:
+		std::vector<int> scope() const override {
+			std::vector<int> scope;
+			scope.reserve( sz );
 
-		int k = 0;
-		while (x[k].isFixed()) {
-			k++;
-		}
-		assert(k < sz);
-		for (int i = k + 1; i < sz; i++) {
-			assert(x[i].isFixed());
-		}
-
-		if ((k < sp && x[k].remValNotR(-sum_fixed)) || (k >= sp && y[k].remValNotR(-sum_fixed))) {
-			Clause* m_r = nullptr;
-			if (so.lazy) {
-				m_r = Reason_new(sz + R);
-				for (int i = 0; i < k; i++) {
-					(*m_r)[i + 1] = x[i].getValLit();
-				}
-				for (int i = k + 1; i < sz; i++) {
-					(*m_r)[i] = x[i].getValLit();
-				}
-				if (R != 0) {
-					(*m_r)[sz] = r.getValLit();
-				}
+			for (int i = 0 ; i < sz; i++) {
+				scope.push_back(x[i].var->var_id);
 			}
-			if (k < sp) {
-				if (!x[k].remVal(-sum_fixed, m_r)) {
-					return false;
-				}
-			} else {
-				if (!y[k].remVal(-sum_fixed, m_r)) {
-					return false;
-				}
-			}
-		}
 
-		return true;
-	}
+			return scope;
+		}
 };
 
 //-----

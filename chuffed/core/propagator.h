@@ -34,6 +34,12 @@ Assumptions:
 enum ConLevel { CL_DEF, CL_VAL, CL_BND, CL_DOM };
 
 class Propagator {
+	protected:
+		// TODO: Remove this and cast propagators in the engine to test support?
+		bool cacheSupport{false};
+
+		void setCacheSupport() { cacheSupport = true; }
+
 public:
 	const int prop_id;
 	int priority{0};
@@ -47,6 +53,8 @@ public:
 	Propagator() : prop_id(engine.propagators.size()), satisfied(0) { engine.propagators.push(this); }
 
 	virtual ~Propagator() = default;
+
+	bool supportsCaching() const { return cacheSupport; }
 
 	// Push propgator into queue if it isn't already there
 	void pushInQueue() {

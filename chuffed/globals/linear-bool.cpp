@@ -9,66 +9,91 @@
 #include "chuffed/vars/int-view.h"
 #include "chuffed/vars/vars.h"
 
+#include "chuffed/caching/keys/constraints/CLinearLE.h"
+#include "chuffed/caching/propagators/DominanceConstraint.h"
+
 // sum x_i <= y
 
 template <int U = 0>
-class BoolLinearLE : public Propagator {
-public:
-	vec<BoolView> x;
-	IntView<U> y;
+class BoolLinearLE : public DominanceConstraint {
+	public:
+		vec<BoolView> x;
+		IntView<U> y;
 
-	// Persistent state
-	Tint ones;
+		// Persistent state
+		Tint ones;
 
-	vec<Lit> ps;
+		vec<Lit> ps;
 
-	BoolLinearLE(vec<BoolView>& _x, IntView<U> _y) : x(_x), y(_y), ones(0) {
-		for (int i = 0; i < x.size(); i++) {
-			x[i].attach(this, i, EVENT_L);
-		}
-		y.attach(this, x.size(), EVENT_U);
-	}
-
-	void wakeup(int i, int /*c*/) override {
-		if (i < x.size()) {
-			ones++;
-		}
-		pushInQueue();
-	}
-
-	bool propagate() override {
-		const int y_max = y.getMax();
-
-		if (ones > y_max) {
-			ones = y_max + 1;
-		}
-
-		setDom2(y, setMin, ones, 1);
-
-		if (ones == y_max) {
+		BoolLinearLE(vec<BoolView>& _x, IntView<U> _y) : DominanceConstraint( _x.size() + 1 ), x(_x), y(_y), ones(0) {
 			for (int i = 0; i < x.size(); i++) {
-				if (!x[i].isFixed()) {
-					x[i].setVal2(false, Reason(prop_id, 0));
+				x[i].attach(this, i, EVENT_L | EVENT_U);
+			}
+			y.attach(this, x.size(), EVENT_U | EVENT_F);
+
+			for (int i = 0; i < x.size(); i++) {
+				if ( !x[i].isFixed() ) {
+					engine.addBool( x[i] );
 				}
 			}
 		}
 
-		return true;
-	}
+		void wakeup(int i, int c) override {
+			if ( i < x.size() ) {
+				fixed++;
 
-	Clause* explain(Lit /*p*/, int inf_id) override {
-		ps.clear();
-		ps.growTo(ones + 1);
-		for (int i = 0, j = 1; j <= ones; i++) {
-			if (x[i].isTrue()) {
-				ps[j++] = ~x[i];
+				if ( x[i].isTrue() ) {
+					ones++;
+					pushInQueue();
+				}
+			} else {
+				if ( (c & y.getEvent(EVENT_U)) != 0 ) { pushInQueue(); }
+				if ( (c & EVENT_F) != 0 ) { fixed++; }
 			}
 		}
-		if (inf_id == 0) {
-			ps.push(y.getMaxLit());
+
+		bool propagate() override {
+			const int y_max = y.getMax();
+
+			if (ones > y_max) {
+				ones = y_max + 1;
+			}
+
+			setDom2(y, setMin, ones, 1);
+
+			if (ones == y_max) {
+				for (int i = 0; i < x.size(); i++) {
+					if (!x[i].isFixed()) {
+						x[i].setVal2(false, Reason(prop_id, 0));
+					}
+				}
+			}
+
+			return true;
 		}
-		return Reason_new(ps);
-	}
+
+		Clause* explain(Lit /*p*/, int inf_id) override {
+			ps.clear();
+			ps.growTo(ones + 1);
+			for (int i = 0, j = 1; j <= ones; i++) {
+				if (x[i].isTrue()) {
+					ps[j++] = ~x[i];
+				}
+			}
+			if (inf_id == 0) {
+				ps.push(y.getMaxLit());
+			}
+			return Reason_new(ps);
+		}
+
+		std::unique_ptr<DomConstraintKey> projectionKey() const override {
+			return std::make_unique<CLinearLE>( CLinearLE(prop_id, y.getMax() - ones) );
+		}
+
+	protected:
+		std::vector<int> scope() const override {
+			return std::vector<int>{ y.var->var_id };
+		}
 };
 
 //-----

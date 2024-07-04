@@ -54,9 +54,9 @@ public:
 	bool fd_simplify{true};   // Simplify FD propagators at top level
 
 	// Lazy clause options
-	bool lazy{true};     // Use lazy clause
+	bool lazy{false};     // Use lazy clause
 	bool finesse{true};  // Get better explanations sometimes
-	bool learn{true};    // Learn clauses
+	bool learn{false};    // Learn clauses
 	bool vsids{false};   // Use VSIDS as branching heuristic
 #if PHASE_SAVING
 	int phase_saving{0};  // Repeat same variable polarity (0=no, 1=recent, 2=always)
@@ -139,6 +139,17 @@ public:
 	bool alldiff_stage{true};  // if bounds or domain consistency, put value propagator too
 
 	bool assump_int{false};  // Try and convert assumptions back to integer domain expressions.
+
+	// Caching options.
+	bool caching{false};					 // Enable caching
+	bool varDominanceCheck{false};
+	int cacheStrategy{0};				 // Caching strategy
+	int pruneInterval{0};
+	int pruneThreshold{1000};
+	int pruneSize{0}; // Only used when maximum size of cache is set.
+	int cacheSize{-1};					 // Maximum cache size
+	std::string eventFile{"./events.csv"}; // The output file for the cache events.
+	std::string cacheEvents; // File used by the event cache.
 
 #ifdef HAS_PROFILER
 	// CP Profiler

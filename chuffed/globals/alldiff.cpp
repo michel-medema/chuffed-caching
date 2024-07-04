@@ -10,6 +10,8 @@
 #include "chuffed/vars/int-view.h"
 #include "chuffed/vars/vars.h"
 
+#include "chuffed/caching/propagators/CachingConstraint.h"
+
 #include <algorithm>
 #include <cassert>
 #include <climits>
@@ -20,7 +22,7 @@
 // x[i] != x[j] for all i, j
 
 template <int U = 0>
-class AllDiffValue : public Propagator, public Checker {
+class AllDiffValue : public CachingConstraint, public Checker {
 public:
 	const int sz;
 	IntView<U>* const x;
@@ -422,7 +424,7 @@ struct Node {
 };
 
 template <int U = 0>
-class AllDiffDomain : public Propagator, public Checker {
+class AllDiffDomain : public CachingConstraint, public Checker {
 public:
 	const int sz;
 	IntView<U>* const x;

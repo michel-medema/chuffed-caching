@@ -3,6 +3,12 @@
 
 #include "chuffed/support/misc.h"
 
+#include "chuffed/caching/cache/ICache.h"
+#include "chuffed/caching/keys/ProjectionKey.h"
+#include "chuffed/caching/keys/EquivalencePart.h"
+#include "chuffed/caching/keys/DominancePart.h"
+#include "chuffed/caching/keys/StateBuilder.h"
+
 #include <functional>
 #include <random>
 #include <string>
@@ -23,10 +29,21 @@ class Propagator;
 class PseudoProp;
 class TrailElem;
 class BoolView;
+// Caching.
+class DominanceConstraint;
+class EquivalenceConstraint;
+class Boolean;
 
 //-----
 
 class Engine {
+private:
+	// Caching.
+	std::unordered_map<int, ProjectionKey<EquivalencePart, DominancePart>> searchStates;
+	std::unique_ptr<ICache<EquivalencePart, DominancePart>> cache;
+	std::unique_ptr<StateBuilder> stateBuilder;
+	std::set<BoolView> booleans;
+
 public:
 	static const int num_queues = 6;
 
@@ -79,6 +96,11 @@ public:
 
 	std::default_random_engine rnd;
 
+	// Caching.
+	std::vector<DominanceConstraint*> dominanceConstraints;
+	std::vector<EquivalenceConstraint*> equivalenceConstraints;
+	std::vector<Boolean*> booleanConstraints;
+
 private:
 	// Init
 	void init();
@@ -99,6 +121,9 @@ private:
 #if HAS_VAR_IMPACT
 	vec<int>& getVarSizes(vec<int>& outVarSizes) const;
 #endif
+
+	// Caching.
+	void addStatesToCache(int newDecisionLevel);
 
 public:
 	// Constructor
@@ -136,6 +161,9 @@ public:
 	void setOutputStream(std::ostream& os) { output_stream = &os; }
 
 	void setSolutionCallback(std::function<void(Problem*)> f) { solution_callback = std::move(f); }
+
+	// Caching.
+	void addBool(BoolView b);
 };
 
 extern Engine engine;

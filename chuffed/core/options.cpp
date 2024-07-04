@@ -1,4 +1,3 @@
-
 #include "chuffed/core/options.h"
 
 #include "chuffed/core/engine.h"
@@ -11,6 +10,10 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+
+#ifdef linux
+#include <filesystem>
+#endif
 
 Options so;
 
@@ -523,6 +526,33 @@ void parseOptions(int& argc, char**& argv, std::string* fileArg, const std::stri
 			so.finesse = boolBuffer;
 		} else if (cop.getBool("--learn", boolBuffer)) {
 			so.learn = boolBuffer;
+		} else if (cop.getBool("--caching", boolBuffer)) {
+			so.caching = boolBuffer;
+		} else if (cop.getBool("--variable-dominance-check", boolBuffer)) {
+			so.varDominanceCheck = boolBuffer;
+		} else if (cop.get("--prune-interval", &intBuffer)) {
+			so.pruneInterval = intBuffer;
+		} else if (cop.get("--prune-threshold", &intBuffer)) {
+			so.pruneThreshold = intBuffer;
+		} else if (cop.get("--prune-size", &intBuffer)) {
+			so.pruneSize = intBuffer;
+		} else if (cop.get("--cache-size", &intBuffer)) { // TODO: This can be enabled without setting a prune size or the right strategy.
+			so.cacheSize = intBuffer;
+		} else if (cop.get("--cache-strategy", &intBuffer)) {
+			so.cacheStrategy = intBuffer;
+		} else if (cop.get("--cache-event-out", &stringBuffer)) {
+#ifdef linux
+			std::filesystem::path path = std::filesystem::path(stringBuffer);
+
+			if ( !std::filesystem::is_directory(path.parent_path()) ) {
+				std::cerr << "The event directory " << stringBuffer << " does not exist or is not a valid path." << std::endl;
+				std::exit(EXIT_FAILURE);
+			}
+#endif
+
+			so.eventFile = stringBuffer;
+		} else if (cop.get("--cache-events", &stringBuffer)) {
+			so.cacheEvents = stringBuffer;
 		} else if (cop.getBool("--vsids", boolBuffer)) {
 			so.vsids = boolBuffer;
 		} else if (cop.getBool("--sort-learnt-level", boolBuffer)) {
