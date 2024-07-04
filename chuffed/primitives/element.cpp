@@ -9,6 +9,8 @@
 #include "chuffed/vars/int-view.h"
 #include "chuffed/vars/vars.h"
 
+#include "chuffed/caching/propagators/EquivalenceConstraint.h"
+
 #include <cassert>
 #include <climits>
 #include <cstdint>
@@ -403,7 +405,7 @@ public:
 };
 
 template <int U = 0, int V = 0, int W = 0>
-class IntElemBounds : public Propagator {
+class IntElemBounds : public EquivalenceConstraint {
 	const IntView<U> y;
 	const IntView<V> x;
 	vec<IntView<W> > a;
@@ -419,163 +421,189 @@ class IntElemBounds : public Propagator {
 	bool no_min_support{false};
 	bool no_max_support{false};
 
-public:
-	IntElemBounds(IntView<U> _y, IntView<V> _x, vec<IntView<W> >& _a)
-			: y(_y), x(_x), a(_a), min_support(-1), max_support(-1), fixed_index(-1) {
-		for (int i = 0; i < a.size(); i++) {
-			a[i].attach(this, i, EVENT_LU);
+	public:
+		IntElemBounds(IntView<U> _y, IntView<V> _x, vec<IntView<W> >& _a)
+				: EquivalenceConstraint( _a.size() + 2 ), y(_y), x(_x), a(_a), min_support(-1), max_support(-1), fixed_index(-1) {
+			for (int i = 0; i < a.size(); i++) {
+				a[i].attach(this, i, EVENT_LU | EVENT_F);
+			}
+			y.attach(this, a.size(), EVENT_LU | EVENT_F);
+			x.attach(this, a.size() + 1, EVENT_C | EVENT_F);
 		}
-		y.attach(this, a.size(), EVENT_LU);
-		x.attach(this, a.size() + 1, EVENT_C);
-	}
 
-	void wakeup(int i, int c) override {
-		if (i == a.size() + 1 && (c & EVENT_F)) {
-			fixed_index = x.getVal();
-			no_min_support = no_max_support = false;
-			pushInQueue();
-		}
-		if (fixed_index >= 0) {
-			if (i == a.size() || i == fixed_index) {
+		void wakeup(int i, int c) override {
+			if ( (c & EVENT_F) != 0 ) { ++fixed; }
+
+			if (i == a.size() + 1 && (c & EVENT_F)) {
+				fixed_index = x.getVal();
+				no_min_support = no_max_support = false;
 				pushInQueue();
 			}
-		} else {
-			if (i < a.size()) {
-				if (i == min_support && a[i].getMin() > y.getMin()) {
-					no_min_support = true;
-				}
-				if (i == max_support && a[i].getMax() < y.getMax()) {
-					no_max_support = true;
-				}
-				pushInQueue();
-			} else if (i == a.size() + 1) {
-				if (!x.indomain(min_support)) {
-					no_min_support = true;
-					pushInQueue();
-				}
-				if (!x.indomain(max_support)) {
-					no_max_support = true;
+			if (fixed_index >= 0) {
+				if (i == a.size() || i == fixed_index) {
 					pushInQueue();
 				}
 			} else {
-				pushInQueue();
+				if (i < a.size()) {
+					if (i == min_support && a[i].getMin() > y.getMin()) {
+						no_min_support = true;
+					}
+					if (i == max_support && a[i].getMax() < y.getMax()) {
+						no_max_support = true;
+					}
+					pushInQueue();
+				} else if (i == a.size() + 1) {
+					if (!x.indomain(min_support)) {
+						no_min_support = true;
+						pushInQueue();
+					}
+					if (!x.indomain(max_support)) {
+						no_max_support = true;
+						pushInQueue();
+					}
+				} else {
+					pushInQueue();
+				}
 			}
 		}
-	}
 
-	bool propagate() override {
-		// y = a[fixed_index]
-		if (fixed_index >= 0) {
-			assert(x.getVal() == fixed_index);
-			const IntView<W>& f = a[fixed_index];
-			setDom(y, setMin, f.getMin(), f.getMinLit(), x.getValLit());
-			setDom(f, setMin, y.getMin(), y.getMinLit(), x.getValLit());
-			setDom(y, setMax, f.getMax(), f.getMaxLit(), x.getValLit());
-			setDom(f, setMax, y.getMax(), y.getMaxLit(), x.getValLit());
-			if (y.isFixed() && f.isFixed()) {
-				satisfied = true;
+		bool propagate() override {
+			// y = a[fixed_index]
+			if (fixed_index >= 0) {
+				assert(x.getVal() == fixed_index);
+				const IntView<W>& f = a[fixed_index];
+				setDom(y, setMin, f.getMin(), f.getMinLit(), x.getValLit());
+				setDom(f, setMin, y.getMin(), y.getMinLit(), x.getValLit());
+				setDom(y, setMax, f.getMax(), f.getMaxLit(), x.getValLit());
+				setDom(f, setMax, y.getMax(), y.getMaxLit(), x.getValLit());
+				if (y.isFixed() && f.isFixed()) {
+					satisfied = true;
+				}
+				return true;
 			}
+
+			for (int i = 0; i < a.size(); i++) {
+				if (!x.indomain(i)) {
+					continue;
+				}
+				if (y.getMax() < a[i].getMin()) {
+					setDom(x, remVal, i, y.getMaxLit(), a[i].getMinLit());
+				}
+				if (y.getMin() > a[i].getMax()) {
+					setDom(x, remVal, i, y.getMinLit(), a[i].getMaxLit());
+				}
+			}
+
+			if (no_min_support) {
+				const int64_t old_m = y.getMin();
+				int64_t new_m = INT64_MAX;
+				int best = -1;
+				for (int i = 0; i < a.size(); i++) {
+					if (!x.indomain(i)) {
+						continue;
+					}
+					const int64_t cur_m = a[i].getMin();
+					if (cur_m < new_m) {
+						best = i;
+						new_m = cur_m;
+						if (cur_m <= old_m) {
+							break;
+						}
+					}
+				}
+				min_support = best;
+				if (y.setMinNotR(new_m)) {
+					Clause* r = nullptr;
+					if (so.lazy) {
+						r = Reason_new(a.size() + 1);
+						// Finesse lower bounds
+						for (int i = 0; i < a.size(); i++) {
+							(*r)[i + 1] = x.indomain(i) ? a[i].getFMinLit(new_m) : x.getLit(i, LR_EQ);
+						}
+					}
+					if (!y.setMin(new_m, r)) {
+						return false;
+					}
+				}
+				no_min_support = false;
+			}
+
+			if (no_max_support) {
+				const int64_t old_m = y.getMax();
+				int64_t new_m = INT_MIN;
+				int best = -1;
+				for (int i = 0; i < a.size(); i++) {
+					if (!x.indomain(i)) {
+						continue;
+					}
+					const int64_t cur_m = a[i].getMax();
+					if (cur_m > new_m) {
+						best = i;
+						new_m = cur_m;
+						if (cur_m >= old_m) {
+							break;
+						}
+					}
+				}
+				max_support = best;
+				if (y.setMaxNotR(new_m)) {
+					Clause* r = nullptr;
+					if (so.lazy) {
+						r = Reason_new(a.size() + 1);
+						// Finesse upper bounds
+						for (int i = 0; i < a.size(); i++) {
+							(*r)[i + 1] = x.indomain(i) ? a[i].getFMaxLit(new_m) : x.getLit(i, LR_EQ);
+						}
+					}
+					if (!y.setMax(new_m, r)) {
+						return false;
+					}
+				}
+				no_max_support = false;
+			}
+
 			return true;
 		}
 
-		for (int i = 0; i < a.size(); i++) {
-			if (!x.indomain(i)) {
-				continue;
-			}
-			if (y.getMax() < a[i].getMin()) {
-				setDom(x, remVal, i, y.getMaxLit(), a[i].getMinLit());
-			}
-			if (y.getMin() > a[i].getMax()) {
-				setDom(x, remVal, i, y.getMinLit(), a[i].getMaxLit());
-			}
-		}
-
-		if (no_min_support) {
-			const int64_t old_m = y.getMin();
-			int64_t new_m = INT64_MAX;
-			int best = -1;
-			for (int i = 0; i < a.size(); i++) {
-				if (!x.indomain(i)) {
-					continue;
-				}
-				const int64_t cur_m = a[i].getMin();
-				if (cur_m < new_m) {
-					best = i;
-					new_m = cur_m;
-					if (cur_m <= old_m) {
-						break;
-					}
-				}
-			}
-			min_support = best;
-			if (y.setMinNotR(new_m)) {
-				Clause* r = nullptr;
-				if (so.lazy) {
-					r = Reason_new(a.size() + 1);
-					// Finesse lower bounds
-					for (int i = 0; i < a.size(); i++) {
-						(*r)[i + 1] = x.indomain(i) ? a[i].getFMinLit(new_m) : x.getLit(i, LR_EQ);
-					}
-				}
-				if (!y.setMin(new_m, r)) {
-					return false;
-				}
-			}
+		void clearPropState() override {
+			in_queue = false;
 			no_min_support = false;
-		}
-
-		if (no_max_support) {
-			const int64_t old_m = y.getMax();
-			int64_t new_m = INT_MIN;
-			int best = -1;
-			for (int i = 0; i < a.size(); i++) {
-				if (!x.indomain(i)) {
-					continue;
-				}
-				const int64_t cur_m = a[i].getMax();
-				if (cur_m > new_m) {
-					best = i;
-					new_m = cur_m;
-					if (cur_m >= old_m) {
-						break;
-					}
-				}
-			}
-			max_support = best;
-			if (y.setMaxNotR(new_m)) {
-				Clause* r = nullptr;
-				if (so.lazy) {
-					r = Reason_new(a.size() + 1);
-					// Finesse upper bounds
-					for (int i = 0; i < a.size(); i++) {
-						(*r)[i + 1] = x.indomain(i) ? a[i].getFMaxLit(new_m) : x.getLit(i, LR_EQ);
-					}
-				}
-				if (!y.setMax(new_m, r)) {
-					return false;
-				}
-			}
 			no_max_support = false;
 		}
 
-		return true;
-	}
-
-	void clearPropState() override {
-		in_queue = false;
-		no_min_support = false;
-		no_max_support = false;
-	}
-
-	int checkSatisfied() override {
-		if (satisfied) {
-			return 1;
+		int checkSatisfied() override {
+			if (satisfied) {
+				return 1;
+			}
+			if (x.isFixed() && y.isFixed() && a[static_cast<int>(x.getVal())].isFixed()) {
+				satisfied = true;
+			}
+			return 3;
 		}
-		if (x.isFixed() && y.isFixed() && a[static_cast<int>(x.getVal())].isFixed()) {
-			satisfied = true;
+
+		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+			for (int i = 0; i < a.size(); i++) {
+				ints.emplace_back( val(a[i]).value_or(INT_MAX) );
+			}
+
+			ints.emplace_back( val(x).value_or(INT_MAX) );
+			ints.emplace_back( val(y).value_or(INT_MAX) );
 		}
-		return 3;
-	}
+
+	protected:
+		std::vector<int> scope() const override {
+			std::vector<int> scope;
+			scope.reserve( this->n );
+
+			for (int i = 0; i < a.size(); i++) {
+				scope.push_back( a[i].var->var_id );
+			}
+
+			scope.push_back( x.var->var_id );
+			scope.push_back( y.var->var_id );
+
+			return scope;
+		}
 };
 
 template <int U = 0, int V = 0, int W = 0>

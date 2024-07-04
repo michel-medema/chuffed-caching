@@ -63,7 +63,7 @@ The largest part of the caching-related code can be found in the [caching](./chu
 * [arithmetic.cpp](./chuffed/primitives/arithmetic.cpp) The Abs propagator now extends the `CachingConstraint` class (which is a subclass of the `Propagator` class). Times, TimesAll, and Divide have been converted into an `EquivalenceConstraint`. Min2 has been turned into a `DominanceConstraint`.
 * [binary.cpp](./chuffed/primitives/binary.cpp) BinGE and BinNE have been converted into an `EquivalenceConstraint`.
 * [bool.cpp](./chuffed/primitives/bool.cpp) Boolean variables are added to the engine and special Boolean propagators are created for caching purposes.
-* [element.cpp](./chuffed/primitives/element.cpp) Add caching support???
+* [element.cpp](./chuffed/primitives/element.cpp) IntElemBounds has been converted into an `EquivalenceConstraint`. The projection key includes all the values of the fixed variables of the constraint, the most strict representation that does not allow for any dominance detection. This representation is used because it is, at this point, not clear whether a more relaxed representation is possible.
 * [linear.cpp](./chuffed/primitives/linear.cpp) LinearGE has been converted into a `DominanceConstraint`. LinearNE has been converted into an `EquivalenceConstraint`.
 * [alldiff.cpp](./chuffed/global/alldif.cpp) AllDiffValue and AllDiffDomain have been converted into a `CachingConstraint`.
 * [linear-bool.cpp](./chuffed/global/linear-bool.cpp) BoolLinearLE has been converted into a `DominanceConstraint`.
