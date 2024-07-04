@@ -1283,7 +1283,7 @@ void Engine::solve(Problem* p, const std::string& problemLabel) {
 	delete profilerConnector;
 #endif
 
-	if (so.verbosity >= 1) {
-		printStats();
-	}
+	//if (so.verbosity >= 1) {
+	printStats();
+	//}
 }

@@ -14,11 +14,18 @@ FetchContent_MakeAvailable(googletest)
 add_executable(tests_run
         doctest.cpp
 
+        # Some of the test cases target or use the IntVar class of Chuffed. This class imports engine.h, which relies on
+        # some functionality provided by these FlatZinc classes. Without these two imports, the compiler complains that
+        # no implementation can be found for those FlatZinc functions, even when chuffed_fzn is listed as a dependency.
+        # Adding these two files to this list solves that problem and allows the test cases to be compiled.
+        ../chuffed/flatzinc/flatzinc.cpp
+        ../chuffed/flatzinc/flatzinc.h
+
         caching/keys/constraints/CMinimumTests.cpp
         caching/keys/constraints/CLinearLETests.cpp
         caching/keys/EquivalencePartTests.cpp
-        #caching/keys/DominancePartTests.cpp
-        #caching/keys/VariableDomainTests.cpp
+        caching/keys/DominancePartTests.cpp
+        caching/keys/VariableDomainTests.cpp
         caching/cache/CacheMocks.h
         caching/cache/CacheTests.h
         caching/cache/CacheTests.cpp
