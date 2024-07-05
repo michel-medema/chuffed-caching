@@ -784,12 +784,12 @@ RESULT Engine::search(const std::string& problemLabel) {
 			std::cerr << "Number of nodes: \t\t" << nodes << '\n';
 			std::cerr << "Number of conflicts: \t\t" << conflicts << '\n';
 			std::cerr << "Number of propagations: \t" << propagations << '\n';
+			std::cerr << "Nodepath length: \t\t\t" << nodepath.size() << '\n';
 
 			if ( so.caching ) {
 				std::cerr << "Cache size: \t\t\t" << cache->size() << '\n';
 				std::cerr << "Cache keys: \t\t\t" << cache->numKeys() << '\n';
 				std::cerr << "Cache hits: \t\t\t" << cache->hits() << '\n';
-				std::cerr << "Nodepath length: \t\t\t" << nodepath.size() << '\n';
 			}
 		}
 
@@ -937,9 +937,9 @@ RESULT Engine::search(const std::string& problemLabel) {
 				DecInfo& di = dec_info.last();
 				sat.btToLevel(decisionLevel() - 1);
 
-				if ( so.caching ) {
+				/*if ( so.caching ) {
 					rewindPaths( previousDecisionLevel, decisionLevel(), REWIND_OMIT_SKIPPED, timeus );
-				}
+				}*/
 
 #ifdef HAS_PROFILER
 				if (doProfiling()) {
@@ -1286,4 +1286,12 @@ void Engine::solve(Problem* p, const std::string& problemLabel) {
 	//if (so.verbosity >= 1) {
 	printStats();
 	//}
+
+#ifdef LOG_CACHE_EVENTS
+	if ( so.caching ) {
+		std::cerr << "Writing events to file..." << std::endl;
+		eventStore.writeToFile();
+		std::cerr << "Events written to file." << std::endl;
+	}
+#endif
 }

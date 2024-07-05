@@ -8,7 +8,6 @@
 
 # Include CMake files.
 !CMakeLists.txt
-!chuffed.msc.in
 !chuffed-config.cmake.in
 !.clang-format
 !.clang-tidy

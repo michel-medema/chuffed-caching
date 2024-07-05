@@ -42,11 +42,11 @@ The bind mounts and paths should be adjusted as necessary (`/mnt/chuffed/` point
 
 ## Cache Hits
 
-Problems without cache hits: pentominoes, speck-optimisation¹, table-layout¹, ...
+Problems without cache hits: pentominoes, speck-optimisation¹, table-layout¹, bacp (only curriculum_8 and curriculum_10 have cache hits) ...
+
+`elitserien`, `mrcpsp`, `code-generator`, `kidney-exchange`, `sudoku_fixed`, `travelling-thief`, `sudoku_fixed`, `test-scheduling`, `vrplc`, `yumi-static` have unsupported constraints (in many cases, lazy clause generation is already very efficient).
 
 ¹not all instances could be solved, e.g. because the solver did not have enough memory or because of other issues, but the ones that were solved did not have any cache hits.
-
-`elitserien`, `mrcpsp` have unsupported constraints, but lazy clause generation is already very efficient.
 
 ## Changes
 
@@ -65,7 +65,7 @@ The largest part of the caching-related code can be found in the [caching](./chu
 * [bool.cpp](./chuffed/primitives/bool.cpp) Boolean variables are added to the engine and special Boolean propagators are created for caching purposes.
 * [element.cpp](./chuffed/primitives/element.cpp) IntElemBounds has been converted into an `EquivalenceConstraint`. The projection key includes all the values of the fixed variables of the constraint, the most strict representation that does not allow for any dominance detection. This representation is used because it is, at this point, not clear whether a more relaxed representation is possible.
 * [linear.cpp](./chuffed/primitives/linear.cpp) LinearGE has been converted into a `DominanceConstraint`. LinearNE has been converted into an `EquivalenceConstraint`.
-* [alldiff.cpp](./chuffed/global/alldif.cpp) AllDiffValue and AllDiffDomain have been converted into a `CachingConstraint`.
+* [alldiff.cpp](./chuffed/global/alldif.cpp) AllDiffValue and AllDiffDomain have been converted into a `CachingConstraint`. AllDiffBounds has been converted into an `EquivalenceConstraint` with the most restrictive key, as it is unclear whether a better projection key can be obtained for this propagator.
 * [linear-bool.cpp](./chuffed/global/linear-bool.cpp) BoolLinearLE has been converted into a `DominanceConstraint`.
 * [minimum.cpp](./chuffed/global/minimum.cpp) Minimum has been converted into a `DominanceConstraint`.
 * [table.cpp](./chuffed/global/table.cpp) Added special propagator for table constraints.

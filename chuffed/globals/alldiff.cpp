@@ -11,6 +11,7 @@
 #include "chuffed/vars/vars.h"
 
 #include "chuffed/caching/propagators/CachingConstraint.h"
+#include "chuffed/caching/propagators/EquivalenceConstraint.h"
 
 #include <algorithm>
 #include <cassert>
@@ -144,7 +145,7 @@ int pathmax(const int* t, int i) {
 }
 
 template <int U = 0>
-class AllDiffBounds : public Propagator, public Checker {
+class AllDiffBounds : public EquivalenceConstraint, public Checker {
 public:
 	const int sz;
 	IntView<U>* const x;
@@ -161,7 +162,7 @@ public:
 	int* h;
 	int* bucket;
 
-	AllDiffBounds(vec<IntView<U> > _x, int _range) : sz(_x.size()), x(_x.release()), range(_range) {
+	AllDiffBounds(vec<IntView<U> > _x, int _range) : EquivalenceConstraint( _x.size() ), sz(_x.size()), x(_x.release()), range(_range) {
 		priority = 4;
 		iv = new interval[sz];
 		minsorted = new int[sz];
@@ -169,7 +170,7 @@ public:
 		for (int i = 0; i < sz; i++) {
 			minsorted[i] = i;
 			maxsorted[i] = i;
-			x[i].attach(this, i, EVENT_LU);
+			x[i].attach(this, i, EVENT_LU | EVENT_F);
 		}
 		const int n = 2 * sz + 2;
 		bounds = new int[n];
@@ -177,6 +178,11 @@ public:
 		d = new int[n];
 		h = new int[n];
 		bucket = new int[n];
+	}
+
+	void wakeup(int i, int c) override {
+		if ( ( c & x[i].getEvent(EVENT_LU) ) != 0 ) { pushInQueue(); }
+		if ( (c & EVENT_F) != 0 ) { fixed++; }
 	}
 
 	void sortit() {
@@ -400,6 +406,25 @@ public:
 		delete[] taken;
 		return true;
 	}
+
+	void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+		for (int i = 0; i < sz; i++) {
+			ints.emplace_back(val(x[i]).value_or(INT_MAX));
+		}
+	}
+
+protected:
+	std::vector<int> scope() const override {
+		std::vector<int> scope;
+		scope.reserve( sz );
+
+		for (int i = 0; i < sz; i++) {
+			scope.emplace_back( x[i].var->var_id );
+		}
+
+		return scope;
+	}
+
 };
 
 struct Node {
