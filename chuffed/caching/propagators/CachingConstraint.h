@@ -3,6 +3,7 @@
 
 #include <optional>
 #include <functional>
+#include <vector>
 
 #include "chuffed/core/propagator.h"
 

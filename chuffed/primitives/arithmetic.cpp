@@ -278,9 +278,7 @@ class TimesAll : public EquivalenceConstraint {
 		}
 
 		void wakeup(int /*i*/, int c) override {
-			if ( ( c & x.getEvent(EVENT_LU) ) != 0 || ( c & y.getEvent(EVENT_LU) ) != 0 || ( c & z.getEvent(EVENT_LU) ) != 0 ) {
-				pushInQueue();
-			}
+			pushInQueue();
 
 			if ( (c & EVENT_F) != 0 ) { fixed++; }
 		}
@@ -550,9 +548,7 @@ public:
 	}
 
 	void wakeup(int /*i*/, int c) override {
-		if ( ( c & x.getEvent(EVENT_LU) ) != 0 || ( c & y.getEvent(EVENT_LU) ) != 0 || ( c & z.getEvent(EVENT_LU) ) != 0 ) {
-			pushInQueue();
-		}
+		pushInQueue();
 
 		if ( (c & EVENT_F) != 0 ) { fixed++; }
 	}
@@ -668,9 +664,7 @@ public:
 	}
 
 	void wakeup(int /*i*/, int c) override {
-		if ( ( c & x.getEvent(EVENT_LU) ) != 0 || ( c & y.getEvent(EVENT_LU) ) != 0 || ( c & z.getEvent(EVENT_LU) ) != 0 ) {
-			pushInQueue();
-		}
+		pushInQueue();
 
 		if ( (c & EVENT_F) != 0 ) { fixed++; }
 	}
@@ -758,12 +752,11 @@ template <int U>
 class Min2 : public DominanceConstraint, public Checker {
 	private:
 		Tint64_t min_fixed;
-		Tint64_t z_fixed;
 
 	public:
 		IntView<U> x, y, z;
 
-		Min2(IntView<U> _x, IntView<U> _y, IntView<U> _z) : DominanceConstraint(3), x(_x), y(_y), z(_z), min_fixed(INT_MAX), z_fixed(INT_MAX) {
+		Min2(IntView<U> _x, IntView<U> _y, IntView<U> _z) : DominanceConstraint(3), x(_x), y(_y), z(_z), min_fixed(INT_MAX) {
 			priority = 1;
 			x.attach(this, 0, EVENT_LU | EVENT_F);
 			y.attach(this, 1, EVENT_LU | EVENT_F);
@@ -778,7 +771,6 @@ class Min2 : public DominanceConstraint, public Checker {
 
 				if ( i == 0 && x.getVal() < min_fixed ) { min_fixed = x.getVal(); }
 				if ( i == 1 && y.getVal() < min_fixed ) { min_fixed = y.getVal(); }
-				if ( i == 2 ) { z_fixed = z.getVal(); }
 			}
 		}
 
@@ -816,7 +808,7 @@ class Min2 : public DominanceConstraint, public Checker {
 		}
 
 		std::unique_ptr<DomConstraintKey> projectionKey() const override {
-			return std::make_unique<CMinimum>( CMinimum( prop_id, z_fixed, min_fixed ) );
+			return std::make_unique<CMinimum>( CMinimum( prop_id, val(z).value_or(INT_MAX), min_fixed ) );
 		}
 
 	protected:

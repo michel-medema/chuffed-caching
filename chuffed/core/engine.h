@@ -163,7 +163,7 @@ public:
 	void setSolutionCallback(std::function<void(Problem*)> f) { solution_callback = std::move(f); }
 
 	// Caching.
-	void addBool(BoolView b);
+	void addBool(const BoolView& b);
 };
 
 extern Engine engine;

@@ -1,6 +1,10 @@
 #include "StateBuilder.h"
 
+#include <cstdint>
 #include <unordered_map>
+#include <utility>
+#include <vector>
+#include <set>
 
 #include "chuffed/vars/int-var.h"
 
@@ -9,6 +13,7 @@
 #include "chuffed/caching/propagators/EquivalenceConstraint.h"
 #include "chuffed/caching/propagators/DominanceConstraint.h"
 #include "chuffed/caching/propagators/Boolean.h"
+#include "chuffed/caching/keys/VariableDomain.h"
 
 StateBuilder::StateBuilder(
   vec<IntVar *> variables,

@@ -432,7 +432,10 @@ class IntElemBounds : public EquivalenceConstraint {
 		}
 
 		void wakeup(int i, int c) override {
-			if ( (c & EVENT_F) != 0 ) { ++fixed; }
+			if ( (c & EVENT_F) != 0 ) {
+				++fixed;
+				this->checkSatisfied();
+			}
 
 			if (i == a.size() + 1 && (c & EVENT_F)) {
 				fixed_index = x.getVal();
@@ -581,7 +584,7 @@ class IntElemBounds : public EquivalenceConstraint {
 			return 3;
 		}
 
-		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
+		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& /*bools*/ ) const override {
 			for (int i = 0; i < a.size(); i++) {
 				ints.emplace_back( val(a[i]).value_or(INT_MAX) );
 			}

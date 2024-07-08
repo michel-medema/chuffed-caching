@@ -181,7 +181,8 @@ public:
 	}
 
 	void wakeup(int i, int c) override {
-		if ( ( c & x[i].getEvent(EVENT_LU) ) != 0 ) { pushInQueue(); }
+		pushInQueue();
+
 		if ( (c & EVENT_F) != 0 ) { fixed++; }
 	}
 

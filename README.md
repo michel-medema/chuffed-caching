@@ -2,6 +2,8 @@
 
 A clone of version 0.13.2 of [Chuffed](https://github.com/chuffed/chuffed) to which a caching option has been added to exploit subproblem dominance as defined by Chu et al [1]. The code is a clone of the corresponding branch of the original repository with full history to make it easier to integrate any future changes from the original repository into this version of Chuffed.
 
+TODO: Only store values of fixed variables?
+
 ## Usage
 
 The Dockerfile defines a build environment that can be used to compile the project and a runtime environment that can be used to run the executable obtained from the compilation step.
@@ -54,12 +56,11 @@ The largest part of the caching-related code can be found in the [caching](./chu
 
 * [engine.h](./chuffed/core/engine.h) Several class members and methods have been added that are used to keep track of subproblems, add them to the cache when encountering a conflict, and search the cache for dominating subproblems.
 * [engine.cpp](./chuffed/core/engine.cpp) The search loop has been modified to use the cache to search for dominating subproblems. The backtracking function has been adjusted so that it adds subproblems that have been fully explored to the cache. The solve method checks caching support for all constraints that occur in a problem.
-* [init.cpp](./chuffed/core/init.cpp) The functions that initialise the propagators have been moved to the top to ensure that [check why]. A block has also been added to initialise the cache.
+* [init.cpp](./chuffed/core/init.cpp) The functions that initialise the propagators have been moved to the top to ensure that fixed variables are correctly propagated. A block has also been added to initialise the cache.
 * [options.h](./chuffed/core/options.h) Several options related to caching have been added. See below for more details. Lazy and learn default to false.
 * [options.cpp](./chuffed/core/options.cpp) Added cases to parse the caching options.
 * [propagator.h](./chuffed/core/propagator.h) Added a Boolean value that indicates whether the propagator supports caching along with functions to enable and check caching support. These are convenience methods that make it easier to identify propagators for which caching support has not been added, which is needed to ensure that the solver does not run with such propagators while caching is enabled, as that may result in incorrect behaviour.
 * [stats.cpp](./chuffed/core/stats.cpp) Included caching-related stats, including the maximum memory consumption of the solver.
-* [int-var.h](./chuffed/vars/int-var.h) Enable INT_DOMAIN_LIST???
 * [arithmetic.cpp](./chuffed/primitives/arithmetic.cpp) The Abs propagator now extends the `CachingConstraint` class (which is a subclass of the `Propagator` class). Times, TimesAll, and Divide have been converted into an `EquivalenceConstraint`. Min2 has been turned into a `DominanceConstraint`.
 * [binary.cpp](./chuffed/primitives/binary.cpp) BinGE and BinNE have been converted into an `EquivalenceConstraint`.
 * [bool.cpp](./chuffed/primitives/bool.cpp) Boolean variables are added to the engine and special Boolean propagators are created for caching purposes.
@@ -70,6 +71,10 @@ The largest part of the caching-related code can be found in the [caching](./chu
 * [minimum.cpp](./chuffed/global/minimum.cpp) Minimum has been converted into a `DominanceConstraint`.
 * [table.cpp](./chuffed/global/table.cpp) Added special propagator for table constraints.
 * [mip.h](./chuffed/global/mip.h) Converted into a `CachingConstraint`. This propagator always exists, even though its usage needs to be enabled explicitly with a command line argument. (Using it with caching may not be correct, so it should not be enabled whenever caching is used.)
+
+## Issues
+
+The variable class in [int-var.h](./chuffed/vars/int-var.h) defines a guard INT_DOMAIN_LIST with which a different version of the domain can be enabled. However, setting the value of this guard to 1 results in compilation errors. This is a problem with Chuffed itself (i.e. unrelated to caching).
 
 ## Bibliography
 

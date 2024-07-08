@@ -16,6 +16,7 @@
 // Caching.
 #include "chuffed/caching/propagators/Boolean.h"
 #include "chuffed/caching/cache/events/CacheEventStore.h"
+#include "chuffed/caching/keys/StateBuilder.h"
 #include "chuffed/caching/keys/ProjectionKey.h"
 
 #include <algorithm>
@@ -33,6 +34,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Caching.
@@ -478,25 +480,71 @@ void Engine::clearPropState() {
 }
 
 void Engine::addStatesToCache( int newDecisionLevel ) {
-	// The decision level tip indicates how many nodes belong to the new decision level. These nodes are skipped,
-	// and all the subsequent nodes are added to the cache since these have been fully explored.
-	for ( auto it = nodepath.cbegin() + decisionLevelTip[newDecisionLevel]; it < nodepath.cend(); ++it ) {
-		auto searchState = searchStates.find( *it );
+	if ( newDecisionLevel < 1 ) {
+		// When the search backtracks to level 0, which is the root node, the search either restarts
+		// or has exhausted all options. In the latter case, there are no solutions so the search will end.
+		// A restart can occur after a certain number of conflicts or when a solution has been found for
+		// an optimisation problem. Since the search engine will create a new search tree after a restart,
+		// the old nodes will never be encountered again. However, because these nodes have not been
+		// exhaustively explored, they cannot be added to the cache.
+		searchStates.clear();
 
-		if ( searchState != searchStates.end() ) {
-			// The variable nextnodeid points to the ID of the next node, so one must be subtracted to get the value of the current node.
-			cache->insert( std::move( searchState->second ), nextnodeid - 1 );
-			searchStates.erase( searchState );
+#ifdef LOG_CACHE_EVENTS
+		eventStore.addEvent( CacheEvent(nextnodeid, CACHE_EVENTS::RESTART, 0) );
+#endif
+	} else {
+		// Normal backtrack triggered, and the exhaustively explored nodes from the previous levels
+		// can be added to the cache.
+		int offset = -1;
+
+		// The engine may add and propagate assumptions, which causes it to create additional decision levels.
+		// Since this process happens towards the end of the search loop and the decisionLevelTip is
+		// only updated at the beginning of this loop, one or more of its entries can be 0. By default,
+		// the main method adds an assumption, causing the decision level 1 to be skipped. If the value at
+		// this decision level were used, states would be added to the cache that have not yet been fully explored.
+		// Since the value of decisionLevelTip should never be zero, this check prevents this problem,
+		// as it simply relies on the decision level before that (essentially no states belong to the
+		// current decision level, meaning that it is safe to keep the states belonging to the previous
+		// decision level (which includes all preceding ones) and add all others to the cache).
+		for ( int i = newDecisionLevel; i >= 0; --i ) {
+			if ( decisionLevelTip[i] > 0 ) {
+				offset = decisionLevelTip[i];
+				break;
+			}
+		}
+
+		if ( offset == -1 ) {
+			std::cerr << "None of the entries in decisionLevelTip at or before index " << newDecisionLevel << " are larger than zero.";
+			return;
+		}
+
+		/*if ( decisionLevelTip[newDecisionLevel] < 1 ) {
+			offset = decisionLevelTip[newDecisionLevel - 1];
+		} else {
+			offset = decisionLevelTip[newDecisionLevel];
+		}*/
+
+		// The decision level tip indicates how many nodes belong to the new decision level. These nodes are skipped,
+		// and all the subsequent nodes are added to the cache since these have been fully explored.
+		for ( auto it = nodepath.cbegin() + offset; it < nodepath.cend(); ++it ) {
+			auto searchState = searchStates.find( *it );
+
+			if ( searchState != searchStates.end() ) {
+				// The variable nextnodeid points to the ID of the next node, so one must be subtracted to get the value of the current node.
+				cache->insert( std::move( searchState->second ), nextnodeid - 1 );
+				searchStates.erase( searchState );
+			}
 		}
 	}
 }
 
-void Engine::addBool( BoolView b ) {
-	if ( b.getSign() ) {
+void Engine::addBool( const BoolView& b ) {
+	/*if ( b.getSign() ) {
 		this->booleans.insert( ~b );
 	} else {
 		this->booleans.insert( b );
-	}
+	}*/
+	this->booleans.insert( b );
 }
 
 void Engine::btToPos(int pos) {
@@ -525,25 +573,7 @@ void Engine::btToLevel(int level) {
 	last_int = nullptr;
 #endif
 
-	if ( so.caching ) {
-		if ( level == 0 ) {
-			// When the search backtracks to level 0, which is the root node, the search either restarts
-			// or has exhausted all options. In the latter case, there are no solutions so the search will end.
-			// A restart can occur after a certain number of conflicts or when a solution has been found for
-			// an optimisation problem. Since the search engine will create a new search tree after a restart,
-			// the old nodes will never be encountered again. However, because these nodes have not been
-			// exhaustively explored, they cannot be added to the cache.
-			searchStates.clear();
-
-#ifdef LOG_CACHE_EVENTS
-			eventStore.addEvent( CacheEvent(nextnodeid, CACHE_EVENTS::RESTART, 0) );
-#endif
-		} else {
-			// Normal backtrack triggered, and the exhaustively explored nodes from the previous levels
-			// can be added to the cache.
-			addStatesToCache( level );
-		}
-	}
+	if ( so.caching ) { addStatesToCache( level ); }
 }
 
 void Engine::topLevelCleanUp() {
@@ -937,10 +967,6 @@ RESULT Engine::search(const std::string& problemLabel) {
 				DecInfo& di = dec_info.last();
 				sat.btToLevel(decisionLevel() - 1);
 
-				/*if ( so.caching ) {
-					rewindPaths( previousDecisionLevel, decisionLevel(), REWIND_OMIT_SKIPPED, timeus );
-				}*/
-
 #ifdef HAS_PROFILER
 				if (doProfiling()) {
 					rewindPaths(previousDecisionLevel, decisionLevel(),
@@ -1235,7 +1261,7 @@ void Engine::solve(Problem* p, const std::string& problemLabel) {
 
 			if ( !propagators[i]->supportsCaching() ) {
 				unsupported = true;
-				std::cout << "Caching enabled with unsupported constraint \"" << demangled << "\"." << std::endl;
+				std::cout << "Caching enabled with unsupported constraint \"" << demangled << "\".\n";
 			}
 
 			// TODO: Could use this instead of modifying the propagator class.
@@ -1245,7 +1271,7 @@ void Engine::solve(Problem* p, const std::string& problemLabel) {
 		}
 
 		if ( unsupported ) {
-			std::cout << "Constraints without support for caching found. Terminating." << std::endl;
+			std::cout << "Constraints without support for caching found. Terminating.\n";
 			exit( EXIT_FAILURE );
 		}
 	}
@@ -1259,6 +1285,10 @@ void Engine::solve(Problem* p, const std::string& problemLabel) {
 			(*output_stream) << "=====UNSATISFIABLE=====\n";
 		}
 	}
+
+#ifdef LOG_CACHE_EVENTS
+	eventStore.addEvent( CacheEvent(nextnodeid, CACHE_EVENTS::FINISHED, 0) );
+#endif
 
 	if (so.learnt_stats) {
 		for (int i = 0; i < sat.learnts.size(); i++) {

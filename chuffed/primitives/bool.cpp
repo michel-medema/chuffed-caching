@@ -8,6 +8,7 @@
 #include "chuffed/caching/propagators/Boolean.h"
 
 #include <utility>
+#include <vector>
 
 void bool_rel(BoolView x, BoolRelType t, BoolView y, BoolView z) {
 	//	NOT_SUPPORTED;
@@ -15,9 +16,9 @@ void bool_rel(BoolView x, BoolRelType t, BoolView y, BoolView z) {
 	int u = 0;
 
 	// Add boolean variables to engine for caching.
-	engine.addBool( x );
-	engine.addBool( y );
-	engine.addBool( z );
+	engine.addBool( v[0] );
+	engine.addBool( v[1] );
+	engine.addBool( v[2] );
 
 	for (int l = 1; l <= 3; l++) {
 		for (int i = 0; i < 8; i++) {
@@ -93,7 +94,7 @@ void bool_clause(vec<BoolView>& x, vec<BoolView>& y) {
 	for (int i = 0; i < x.size(); ++i) { lits.push_back( x[i] ); }
 	for (int i = 0; i < y.size(); ++i) { lits.push_back( ~y[i] ); }
 
-	new Boolean( lits);
+	new Boolean( lits );
 }
 
 // \/ x_i

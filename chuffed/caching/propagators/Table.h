@@ -31,13 +31,13 @@ class Table : public EquivalenceConstraint {
     }
 
     void wakeup( int i, int c ) override {
-      if ( i < xs.size() && c & EVENT_F ) {
+      if ( i < xs.size() && (c & EVENT_F) != 0 ) {
         fixed++;
       }
 
       if ( i >= xs.size() ) {
         fixed++;
-        if ( booleans[i - xs.size()].isTrue() ) b = true;
+        if ( booleans[i - xs.size()].isTrue() ) { b = true; }
       }
     }
 

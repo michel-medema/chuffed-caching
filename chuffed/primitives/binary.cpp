@@ -38,10 +38,8 @@ class BinGE : public EquivalenceConstraint {
 		}
 
 		void wakeup(int i, int c) override {
-			if ( (c & x.getEvent(EVENT_U) ) != 0 || (c & y.getEvent(EVENT_L) ) != 0 || i == 2 ) {
-				if ((R == 0) || !r.isFalse()) {
-					pushInQueue();
-				}
+			if ((R == 0) || !r.isFalse()) {
+				pushInQueue();
 			}
 
 			if ( (c & EVENT_F) != 0 || i == 2 ) {
@@ -101,8 +99,8 @@ class BinGE : public EquivalenceConstraint {
 		}
 
 		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
-			ints.emplace_back( val( x).value_or( INT_MAX) );
-			ints.emplace_back( val( y).value_or( INT_MAX) );
+			ints.emplace_back( val(x).value_or( INT_MAX) );
+			ints.emplace_back( val(y).value_or( INT_MAX) );
 			bools.emplace_back( r.isTrue() );
 		}
 

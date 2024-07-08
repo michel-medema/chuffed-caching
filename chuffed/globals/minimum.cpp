@@ -19,9 +19,6 @@
 
 template <int U>
 class Minimum : public DominanceConstraint, public Checker {
-	private:
-		Tint64_t e;
-
 	public:
 		const int sz;
 		IntView<U>* const x;
@@ -41,8 +38,7 @@ class Minimum : public DominanceConstraint, public Checker {
 					y(_y),
 					min_max_var(-1),
 					min_max(INT_MAX),
-					min_fixed(INT_MAX),
-					e(INT_MAX) {
+					min_fixed(INT_MAX) {
 			priority = 1;
 			for (int i = 0; i < sz; i++) {
 				x[i].attach(this, i, EVENT_LU | EVENT_F);
@@ -72,10 +68,7 @@ class Minimum : public DominanceConstraint, public Checker {
 				pushInQueue();
 			}
 
-			if ( (c & EVENT_F) != 0 ) {
-				fixed++;
-				if ( i == sz ) { e = y.getVal(); }
-			}
+			if ( (c & EVENT_F) != 0 ) { fixed++; }
 		}
 
 		bool propagate() override {
@@ -158,7 +151,7 @@ class Minimum : public DominanceConstraint, public Checker {
 		}
 
 		std::unique_ptr<DomConstraintKey> projectionKey() const override {
-			return std::make_unique<CMinimum>( CMinimum( prop_id, e, min_fixed ) );
+			return std::make_unique<CMinimum>( CMinimum( prop_id, val(y).value_or(INT_MAX), min_fixed ) );
 		}
 
 	protected:

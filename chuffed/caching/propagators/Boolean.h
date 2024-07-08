@@ -1,8 +1,10 @@
 #ifndef CHUFFED_BOOLEAN_H
 #define CHUFFED_BOOLEAN_H
 
+#include <cstdint>
 #include <utility>
 #include <memory>
+#include <vector>
 
 #include "EquivalenceConstraint.h"
 
@@ -20,7 +22,7 @@ class Boolean : public EquivalenceConstraint {
         if ( this->bools[i].isFixed() ) {
           ++fixed;
 
-          if ( this->bools[i].isTrue() ) satisfied = true;
+          if ( this->bools[i].isTrue() ) { satisfied = true; }
         } else {
           this->bools[i].attach( this, i, EVENT_L | EVENT_U );
 

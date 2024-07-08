@@ -74,10 +74,8 @@ class LinearGE : public DominanceConstraint {
 		}
 
 		void wakeup(int i, int c) override {
-			if ( i >= pos.size() || ( pos[i] >= 0 && (c & x[pos[i]].getEvent(EVENT_U)) != 0 ) || ( pos[i] < 0 && (c & y[-pos[i] - 1].getEvent(EVENT_L)) != 0 ) ) {
-				if ((R == 0) || !r.isFalse()) {
-					pushInQueue();
-				}
+			if ((R == 0) || !r.isFalse()) {
+				pushInQueue();
 			}
 
 			if ( (c & EVENT_F) != 0 || i == pos.size() ) {
@@ -277,7 +275,7 @@ class LinearNE : public EquivalenceConstraint {
 			if ( R == 0 ) { ++fixed; }
 
 			if ( !r.isFixed() ) { engine.addBool(r); }
-			if ( R == 1 && r.isFalse() ) { satisfied = true; }
+			if ( R != 0 && r.isFalse() ) { satisfied = true; }
 		}
 
 		void wakeup(int i, int /*c*/) override {
