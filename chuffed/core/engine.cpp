@@ -1083,6 +1083,7 @@ RESULT Engine::search(const std::string& problemLabel) {
 					oss->str("");
 				}
 				if (so.print_sol) {
+					(*output_stream) << "\n----------\n";
 					problem->print(*output_stream);
 					(*output_stream) << "\n----------\n";
 					output_stream->flush();

@@ -110,7 +110,7 @@ void Engine::init() {
 				break;
 			case 5:
 				if ( so.verbosity >= 1 ) {
-					std::cerr << "Using cache with event file " << so.cacheEvents << ".'\\n'";
+					std::cerr << "Using cache with event file " << so.cacheEvents << ".'\n'";
 				}
 				engine.cache = std::make_unique<EventCache<EquivalencePart, DominancePart>>( so.cacheEvents );
 				break;

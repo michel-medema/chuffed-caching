@@ -1,7 +1,6 @@
 #ifndef CHUFFED_CACHEEVENTSTORE_H
 #define CHUFFED_CACHEEVENTSTORE_H
 
-#include <utility>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -28,11 +27,11 @@ class CacheEventStore {
 
             file.open( so.eventFile, std::ofstream::out );
 
-            file << "iteration,event,entry,decisionLevel,fixedVars,unfixedVars" << std::endl;
+            file << "iteration,event,entry,decisionLevel\n";
 
             for ( const CacheEvent &event: events ) {
                 file << event.iteration << "," << cacheEvents[event.type] << "," << event.entry << ","
-                     << event.decisionLevel << std::endl;
+                     << event.decisionLevel << '\n';
             }
 
             file.close();
