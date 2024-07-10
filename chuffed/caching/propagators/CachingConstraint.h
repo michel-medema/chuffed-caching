@@ -11,7 +11,7 @@ class CachingConstraint : public Propagator {
     protected:
         int n;
         bool keyIsTrue = false;
-        Tchar fixed;
+        Tint fixed;
 
         virtual std::vector<int> scope() const {
             return std::vector<int>{};

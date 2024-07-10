@@ -1,13 +1,13 @@
 #ifndef CHUFFED_EQUIVALENCECONSTRAINT_H
 #define CHUFFED_EQUIVALENCECONSTRAINT_H
 
-#include <memory>
+#include <vector>
 
 #include "CachingConstraint.h"
 
 class EquivalenceConstraint : public CachingConstraint {
     protected:
-        virtual std::vector<int> scope() const override = 0;
+        //virtual std::vector<int> scope() const override = 0;
 
     public:
         explicit EquivalenceConstraint(int n, bool add = true): CachingConstraint(n) {

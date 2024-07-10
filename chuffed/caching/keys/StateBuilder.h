@@ -3,35 +3,28 @@
 
 #include <vector>
 #include <set>
+#include <utility>
 
 #include "chuffed/support/vec.h"
 
 #include "chuffed/caching/keys/EquivalencePart.h"
 #include "chuffed/caching/keys/DominancePart.h"
+#include "chuffed/caching/keys/VariableDomain.h"
 
 class IntVar;
-
 class DominanceConstraint;
-
 class EquivalenceConstraint;
-
 class BoolView;
-
-class Boolean;
-
-using std::vector, std::pair;
 
 class StateBuilder {
   private:
-    vector<pair<IntVar*, VariableDomain>> variables;
-    vector<BoolView> booleans;
+		std::vector<std::pair<IntVar*, VariableDomain>> variables;
+		std::vector<BoolView> booleans;
 
     const IntVar *objectiveVariable;
 
-    vector<DominanceConstraint *> dominanceConstraints;
-    vector<EquivalenceConstraint *> equivalenceConstraints;
-
-    vector<Boolean *> booleanConstraints;
+		std::vector<DominanceConstraint *> dominanceConstraints;
+		std::vector<EquivalenceConstraint *> equivalenceConstraints;
 
     static bool domainChanged( const IntVar *var, const VariableDomain &dom );
 
@@ -40,9 +33,8 @@ class StateBuilder {
       vec<IntVar *> variables,
       const std::set<BoolView> &booleans,
       const IntVar *objectiveVariable,
-      const vector<Boolean *> &booleanConstraints,
-      const vector<EquivalenceConstraint *> &equivalenceConstraints,
-      const vector<DominanceConstraint *> &dominanceConstraints
+      const std::vector<EquivalenceConstraint *> &equivalenceConstraints,
+      const std::vector<DominanceConstraint *> &dominanceConstraints
     );
 
     EquivalencePart getEquivalencePart() const;

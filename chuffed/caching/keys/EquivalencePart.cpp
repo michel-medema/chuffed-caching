@@ -7,10 +7,11 @@ EquivalencePart::EquivalencePart(
   std::vector<bool> boolRep,
   std::vector<std::pair<int, int>> unfixedVarRanges,
   std::vector<int64_t> intRep
-) : boolRep( std::move( boolRep ) ), unfixedVarRanges( std::move( unfixedVarRanges ) ), intRep( std::move( intRep ) ), hash_( this->hashValue() ) {}
+) : boolRep( std::move( boolRep ) ),
+			unfixedVarBounds( std::move( unfixedVarRanges ) ), intRep( std::move( intRep ) ), hash_( this->hashValue() ) {}
 
 bool EquivalencePart::operator==( const EquivalencePart &key ) const {
-  return boolRep == key.boolRep && unfixedVarRanges == key.unfixedVarRanges && intRep == key.intRep;
+  return boolRep == key.boolRep && unfixedVarBounds == key.unfixedVarBounds && intRep == key.intRep;
 }
 
 void EquivalencePart::print() const {

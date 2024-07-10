@@ -99,7 +99,6 @@ public:
 	// Caching.
 	std::vector<DominanceConstraint*> dominanceConstraints;
 	std::vector<EquivalenceConstraint*> equivalenceConstraints;
-	std::vector<Boolean*> booleanConstraints;
 
 private:
 	// Init

@@ -6,6 +6,7 @@
 #include "chuffed/vars/bool-view.h"
 
 #include "chuffed/caching/propagators/Boolean.h"
+#include "chuffed/caching/propagators/BoolEqReif.h"
 
 #include <utility>
 #include <vector>
@@ -15,10 +16,15 @@ void bool_rel(BoolView x, BoolRelType t, BoolView y, BoolView z) {
 	const BoolView v[3] = {std::move(x), std::move(y), std::move(z)};
 	int u = 0;
 
-	// Add boolean variables to engine for caching.
-	engine.addBool( v[0] );
-	engine.addBool( v[1] );
-	engine.addBool( v[2] );
+	if ( t == BRT_EQ_REIF ) {
+		// TODO: This results in a memory leak.
+		new BoolEqReif( v[0], v[1], v[2] );
+	} else {
+		// Add boolean variables to engine for caching.
+		engine.addBool( v[0] );
+		engine.addBool( v[1] );
+		engine.addBool( v[2] );
+	}
 
 	for (int l = 1; l <= 3; l++) {
 		for (int i = 0; i < 8; i++) {
@@ -94,6 +100,7 @@ void bool_clause(vec<BoolView>& x, vec<BoolView>& y) {
 	for (int i = 0; i < x.size(); ++i) { lits.push_back( x[i] ); }
 	for (int i = 0; i < y.size(); ++i) { lits.push_back( ~y[i] ); }
 
+	// TODO: This results in a memory leak.
 	new Boolean( lits );
 }
 
@@ -134,6 +141,7 @@ void array_bool_or(vec<BoolView>& x, vec<BoolView>& y, BoolView z) {
 	for (int i = 0; i < y.size(); ++i) { lits.push_back( ~y[i] ); }
 	lits.push_back( ~z );
 
+	// TODO: This results in a memory leak.
 	new Boolean( lits);
 }
 

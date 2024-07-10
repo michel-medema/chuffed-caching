@@ -2,7 +2,7 @@
 
 A clone of version 0.13.2 of [Chuffed](https://github.com/chuffed/chuffed) to which a caching option has been added to exploit subproblem dominance as defined by Chu et al [1]. The code is a clone of the corresponding branch of the original repository with full history to make it easier to integrate any future changes from the original repository into this version of Chuffed.
 
-TODO: Only store values of fixed variables?
+TODO: Only store values of fixed variables in keys?
 
 ## Usage
 
@@ -44,9 +44,15 @@ The bind mounts and paths should be adjusted as necessary (`/mnt/chuffed/` point
 
 ## Cache Hits
 
-Problems without cache hits: pentominoes, speck-optimisation¹, table-layout¹, bacp (only curriculum_8 and curriculum_10 have cache hits) ...
+Problems without cache hits: `pentominoes`, `speck-optimisation`¹, `table-layout`¹, `bacp` (only curriculum_8 and curriculum_10 have cache hits), `areas`, `jobshop`, `kakuro`, `knights`, `langford`, `magicseq`, `mario`, `market_split`, `nmseq`, `nsp`, `open_stacks`, `proteindesign12`, `quasigroup7`, `roster`, `ship-schedule`, `solbat`, `steiner-triples`, `stochastic-vrp`, `tc-graph-color`, `latin-squares`.
 
-`elitserien`, `mrcpsp`, `code-generator`, `kidney-exchange`, `sudoku_fixed`, `travelling-thief`, `sudoku_fixed`, `test-scheduling`, `vrplc`, `yumi-static` have unsupported constraints (in many cases, lazy clause generation is already very efficient).
+Problems with cache hits for which lazy clause generation is at least as efficient (often much more efficient): `league`, `maximum-dag`, `mqueens`, `nonogram`, `photo`, `project-planning`, `rubik`, `search_stress`, `stochastic-fjsp`, `table-layout`, `tents`, `tpp`, `trucking`, `java-auto-gen`, `multi-knapsack`, `on-call-rostering`, `oocsp_racks`, `hrc`, `prize-collecting`, `still_life`, `train`, `opd`.
+
+Problems for which both lazy clause generation and caching time out or that require too much memory (more than 60 GB) with caching: `queens`, `pattern-set-mining`, `talent_scheduling`, `generalized-peacable-queens`, `bus_scheduling`, `cars`, `celar`.
+
+Problems with unsupported constraints (in many cases, lazy clause generation is also already very efficient): `elitserien`, `mrcpsp`, `code-generator`, `kidney-exchange`, `sudoku_fixed`, `travelling-thief`, `sudoku_fixed`, `test-scheduling`, `vrplc`, `yumi-static`, `jobshop2`, `mrcpsp`, `mspsp`, `openshop`, `rcpsp`, `rectangle-packing`, `smelt`, `carpet-cutting`, `gfd-schedule`, `racp`, `stripboard`, `peacable_queens`.
+
+Problems that are too large to read or solve: `road-cons`, `routing-flexible`.
 
 ¹not all instances could be solved, e.g. because the solver did not have enough memory or because of other issues, but the ones that were solved did not have any cache hits.
 
@@ -71,6 +77,7 @@ The largest part of the caching-related code can be found in the [caching](./chu
 * [minimum.cpp](./chuffed/global/minimum.cpp) Minimum has been converted into a `DominanceConstraint`.
 * [table.cpp](./chuffed/global/table.cpp) Added special propagator for table constraints.
 * [mip.h](./chuffed/global/mip.h) Converted into a `CachingConstraint`. This propagator always exists, even though its usage needs to be enabled explicitly with a command line argument. (Using it with caching may not be correct, so it should not be enabled whenever caching is used.)
+* [mznlib](./chuffed/flatzinc/mznlib/) Removed the `fzn_seq_precede_chain_int.mzn` file: it is not clear what projection key should be used for these constraints, and if the file is removed, the compiler decomposes the constraints into simpler ones for which projection keys already exist.
 
 ## Issues
 

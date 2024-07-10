@@ -6,57 +6,51 @@
 #include <vector>
 #include <set>
 
+#include "chuffed/support/vec.h"
 #include "chuffed/vars/int-var.h"
 
 #include "chuffed/caching/keys/EquivalencePart.h"
 #include "chuffed/caching/keys/DominancePart.h"
 #include "chuffed/caching/propagators/EquivalenceConstraint.h"
 #include "chuffed/caching/propagators/DominanceConstraint.h"
-#include "chuffed/caching/propagators/Boolean.h"
 #include "chuffed/caching/keys/VariableDomain.h"
+
+using std::vector, std::pair;
 
 StateBuilder::StateBuilder(
   vec<IntVar *> variables,
   const std::set<BoolView> &booleans,
   const IntVar *objectiveVariable,
-  const vector<Boolean *> &booleanConstraints,
   const vector<EquivalenceConstraint *> &equivalenceConstraints,
   const vector<DominanceConstraint *> &dominanceConstraints
 ) : objectiveVariable( objectiveVariable ) {
   this->variables.reserve( variables.size() );
   this->booleans.reserve( booleans.size() );
-  this->booleanConstraints.reserve( booleanConstraints.size() );
   this->equivalenceConstraints.reserve( equivalenceConstraints.size() );
   this->dominanceConstraints.reserve( dominanceConstraints.size() );
 
   for ( int i = 0; i < variables.size(); i++ ) {
     IntVar *v = variables[i];
 
-    if ( !v->isFixed() && v != objectiveVariable ) this->variables.emplace_back( v, VariableDomain::getDomain( v ) );
+    if ( !v->isFixed() && v != objectiveVariable ) { this->variables.emplace_back( v, VariableDomain::getDomain( v ) ); }
   }
 
   for ( const BoolView &b: booleans ) {
-    if ( !b.isFixed() ) this->booleans.push_back( b );
-  }
-
-  for ( Boolean *b: booleanConstraints ) {
-    b->initialise();
-    if ( !b->includesObjectiveVar() && !b->isSatisfied() ) this->booleanConstraints.push_back( b );
+    if ( !b.isFixed() ) { this->booleans.push_back( b ); }
   }
 
   for ( EquivalenceConstraint *c: equivalenceConstraints ) {
     c->initialise();
-    if ( !c->includesObjectiveVar() && !c->isSatisfied() ) this->equivalenceConstraints.push_back( c );
+    if ( !c->includesObjectiveVar() && !c->isSatisfied() ) { this->equivalenceConstraints.push_back( c ); }
   }
 
   for ( DominanceConstraint *c: dominanceConstraints ) {
     c->initialise();
-    if ( !c->includesObjectiveVar() && !c->isSatisfied() ) this->dominanceConstraints.push_back( c );
+    if ( !c->includesObjectiveVar() && !c->isSatisfied() ) { this->dominanceConstraints.push_back( c ); }
   }
 
   this->variables.shrink_to_fit();
   this->booleans.shrink_to_fit();
-  this->booleanConstraints.shrink_to_fit();
   this->equivalenceConstraints.shrink_to_fit();
   this->dominanceConstraints.shrink_to_fit();
 }
@@ -73,9 +67,9 @@ EquivalencePart StateBuilder::getEquivalencePart() const {
   std::vector<int64_t> intRep;
   std::vector<bool> boolRep;
 
-  boolRep.reserve( 2 * variables.size() + booleans.size() + booleanConstraints.size() );
+  boolRep.reserve( 2 * variables.size() + booleans.size() );
   intRep.reserve( equivalenceConstraints.size() );
-  if ( !so.varDominanceCheck ) unfixedVarRanges.reserve( variables.size() );
+  if ( !so.varDominanceCheck ) { unfixedVarRanges.reserve( variables.size() ); }
 
   for ( const BoolView &b: booleans ) {
     boolRep.push_back( b.isFixed() );
@@ -116,10 +110,6 @@ EquivalencePart StateBuilder::getEquivalencePart() const {
       // considered equal (e.g. 11101 + 11 == 11 + 10111).
       unfixedVarRanges.emplace_back( var->getMin(), var->getMax() );
     }
-  }
-
-  for ( const Boolean *b: booleanConstraints ) {
-    boolRep.push_back( b->satisfied );
   }
 
   for ( const EquivalenceConstraint *c: equivalenceConstraints ) {

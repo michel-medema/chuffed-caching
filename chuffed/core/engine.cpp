@@ -807,7 +807,7 @@ RESULT Engine::search(const std::string& problemLabel) {
 			// At the very first iteration, this object is created because the variables and propagators
 			// are now guaranteed to be initialised, and it allows for the initial propagation to be taken
 			// into consideration (i.e. if a variable is now fixed, it can be removed from the projection keys).
-			this->stateBuilder = std::make_unique<StateBuilder>( vars, booleans, opt_var, booleanConstraints, equivalenceConstraints, dominanceConstraints );
+			this->stateBuilder = std::make_unique<StateBuilder>( vars, booleans, opt_var, equivalenceConstraints, dominanceConstraints );
 		}
 
 		if ( so.verbosity >= 2 && nodeid % 5000 == 0 ) {

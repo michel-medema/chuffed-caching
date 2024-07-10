@@ -201,6 +201,7 @@ add_library(chuffed
   chuffed/caching/keys/constraints/CLinearLE.h
   chuffed/caching/keys/constraints/CMinimum.h
   chuffed/caching/propagators/Boolean.h
+  chuffed/caching/propagators/BoolEqReif.h
   chuffed/caching/cache/events/CacheEventStore.h
   chuffed/caching/keys/ProjectionKey.h
   chuffed/caching/keys/StateBuilder.cpp
