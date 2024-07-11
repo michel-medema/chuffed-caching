@@ -170,11 +170,27 @@ std::string showVec(const vec<int>& v) {
 void rewindPaths(int previousDecisionLevel, int newDecisionLevel, RewindStyle rewindStyle,
 								 long /*timestamp*/) {
 	int currentDecisionLevel;
+	int len = -1;
 	switch (rewindStyle) {
 		case REWIND_OMIT_SKIPPED:
-			nodepath.resize(decisionLevelTip[newDecisionLevel]);
-			altpath.resize(decisionLevelTip[newDecisionLevel] - 1);
+			// In some cases, certain entries in decisionLevelTip are skipped, meaning they have value 0,
+			// which is incorrect and raises an exception when subtracting 1, as the array size is an
+			// unsigned int, causing an overflow. This picks the first value before the current index that
+			// is non-zero.
+			for ( int i = newDecisionLevel; i >= 0; --i ) {
+				if ( decisionLevelTip[i] > 0 ) {
+					len = decisionLevelTip[i];
+					break;
+				}
+			}
+
+			if ( len < 1 ) { return; }
+			nodepath.resize(len);
+			altpath.resize(len - 1);
+			//nodepath.resize(decisionLevelTip[newDecisionLevel]);
+			//altpath.resize(decisionLevelTip[newDecisionLevel] - 1);
 			break;
+
 		case REWIND_SEND_SKIPPED:
 #if DEBUG_VERBOSE
 			std::cerr << "rewinding to level " << newDecisionLevel << "\n";
@@ -966,6 +982,12 @@ RESULT Engine::search(const std::string& problemLabel) {
 				sat.confl = nullptr;
 				DecInfo& di = dec_info.last();
 				sat.btToLevel(decisionLevel() - 1);
+
+				if ( so.caching ) {
+					// Calling this method is not strictly necessary, but it prevents the nodepath and altpath
+					// vectors from growing in an uncontrolled way.
+					rewindPaths(previousDecisionLevel, decisionLevel(), REWIND_OMIT_SKIPPED, timeus);
+				}
 
 #ifdef HAS_PROFILER
 				if (doProfiling()) {

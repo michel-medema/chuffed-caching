@@ -1,6 +1,7 @@
 #ifndef CHUFFED_RANDOMREPLACEMENT_H
 #define CHUFFED_RANDOMREPLACEMENT_H
 
+#include <cstddef>
 #include <vector>
 #include <unordered_map>
 #include <random>
@@ -46,8 +47,8 @@ class RandomReplacement: public EvictionPolicy {
         return -1;
       }
 
-      std::uniform_int_distribution<size_t> distribution( 0, elements.size() - 1 );
-      size_t i = distribution( rng );
+      std::uniform_int_distribution<std::size_t> distribution( 0, elements.size() - 1 );
+      const std::size_t i = distribution( rng );
 
       return elements[i];
     }
