@@ -517,9 +517,13 @@ class TimesAll : public EquivalenceConstraint {
 		}
 
 		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
-			ints.emplace_back( val(x).value_or(INT_MAX) );
+			/*ints.emplace_back( val(x).value_or(INT_MAX) );
 			ints.emplace_back( val(y).value_or(INT_MAX) );
-			ints.emplace_back( val(z).value_or(INT_MAX) );
+			ints.emplace_back( val(z).value_or(INT_MAX) );*/
+
+			addFixed( x, ints );
+			addFixed( y, ints );
+			addFixed( z, ints );
 		}
 
 	protected:
@@ -594,9 +598,13 @@ public:
 	bool check() override { return (x.getShadowVal() * y.getShadowVal() == z.getShadowVal()); }
 
 	void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
-		ints.emplace_back( val(x).value_or(INT_MAX) );
+		/*ints.emplace_back( val(x).value_or(INT_MAX) );
 		ints.emplace_back( val(y).value_or(INT_MAX) );
-		ints.emplace_back( val(z).value_or(INT_MAX) );
+		ints.emplace_back( val(z).value_or(INT_MAX) );*/
+
+		addFixed( x, ints );
+		addFixed( y, ints );
+		addFixed( z, ints );
 	}
 
 protected:
@@ -705,10 +713,14 @@ public:
 		return ceil_div(x.getShadowVal(), y.getShadowVal()) == z.getShadowVal();
 	}
 
-	void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
-		ints.emplace_back( val(x).value_or(INT_MAX) );
+	void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& /*bools*/ ) const override {
+		/*ints.emplace_back( val(x).value_or(INT_MAX) );
 		ints.emplace_back( val(y).value_or(INT_MAX) );
-		ints.emplace_back( val(z).value_or(INT_MAX) );
+		ints.emplace_back( val(z).value_or(INT_MAX) );*/
+
+		addFixed( x, ints );
+		addFixed( y, ints );
+		addFixed( z, ints );
 	}
 
 protected:

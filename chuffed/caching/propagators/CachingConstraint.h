@@ -29,7 +29,7 @@ class CachingConstraint : public Propagator {
                 return false;
             }
 
-            for ( int v: this->scope() ) {
+            for ( const int v: this->scope() ) {
                 if ( v == engine.opt_var->var_id ) {
                     return true;
                 }
@@ -55,10 +55,17 @@ class CachingConstraint : public Propagator {
         static std::optional<int64_t> val( const IntView<I> &v ) {
             if ( v.isFixed() ) {
                 return v.getVal();
-            } else {
-                return {};
             }
+
+						return {};
         }
+
+				template<int I>
+				static void addFixed( const IntView<I> &x, std::vector<int64_t> &v ) {
+					if ( x.isFixed() && x.var->min0 != x.var->max0 ) {
+						v.emplace_back(x.getVal());
+					}
+				}
 };
 
 #endif //CHUFFED_CACHINGCONSTRAINT_H

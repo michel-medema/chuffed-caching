@@ -410,7 +410,8 @@ public:
 
 	void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
 		for (int i = 0; i < sz; i++) {
-			ints.emplace_back(val(x[i]).value_or(INT_MAX));
+			//ints.emplace_back(val(x[i]).value_or(INT_MAX));
+			addFixed( x[i], ints );
 		}
 	}
 

@@ -99,8 +99,10 @@ class BinGE : public EquivalenceConstraint {
 		}
 
 		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
-			ints.emplace_back( val(x).value_or( INT_MAX) );
-			ints.emplace_back( val(y).value_or( INT_MAX) );
+			//ints.emplace_back( val(x).value_or( INT_MAX) );
+			//ints.emplace_back( val(y).value_or( INT_MAX) );
+			addFixed( x, ints );
+			addFixed( y, ints );
 			bools.emplace_back( r.isTrue() );
 		}
 
@@ -197,8 +199,10 @@ class BinNE : public EquivalenceConstraint, public Checker {
 		}
 
 		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& bools ) const override {
-			ints.emplace_back( val( x ).value_or( INT_MAX) );
-			ints.emplace_back( val( y ).value_or( INT_MAX) );
+			//ints.emplace_back( val( x ).value_or( INT_MAX) );
+			//ints.emplace_back( val( y ).value_or( INT_MAX) );
+			addFixed( x, ints );
+			addFixed( y, ints );
 			bools.emplace_back( r.isTrue() );
 		}
 

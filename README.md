@@ -2,8 +2,6 @@
 
 A clone of version 0.13.2 of [Chuffed](https://github.com/chuffed/chuffed) to which a caching option has been added to exploit subproblem dominance as defined by Chu et al [1]. The code is a clone of the corresponding branch of the original repository with full history to make it easier to integrate any future changes from the original repository into this version of Chuffed.
 
-TODO: Only store values of fixed variables in keys?
-
 ## Usage
 
 The Dockerfile defines a build environment that can be used to compile the project and a runtime environment that can be used to run the executable obtained from the compilation step.
@@ -18,7 +16,7 @@ The `cmake` container can then be used to compile the project:
 
 Once the project has been compiled and the executable is available in the build directory, the solver can be executed:
 
-`docker run -v /mnt/chuffed/:/mnt/chuffed/ -v /mnt/minizinc/:/mnt/minizinc/:ro -w /mnt/chuffed/build/ cmake ./fzn-chuffed [option] [fzn file]`.
+`docker run -v /mnt/chuffed/:/mnt/chuffed/ -v /mnt/minizinc/:/mnt/minizinc/:ro -w /mnt/chuffed/build/ cmake ./fzn-chuffed [options] [fzn file]`.
 
 The bind mounts and paths should be adjusted as necessary (`/mnt/chuffed/` points to the top level directory and `/mnt/minizinc/` to the directory that contains the FlatZinc problems).
 
@@ -69,7 +67,7 @@ Problems that are too large to read or solve: `road-cons`, `routing-flexible`.
 
 ## Changes
 
-The largest part of the caching-related code can be found in the [caching](./chuffed/caching) subdirectory. However, adding support for caching also required a number of existing files to be modified. In particular, the propagators have been extended and modified to make it possible to include their representations in the projection keys. These modifications include attaching additional events to the variables, adjusting the `wakeup` method to update the internal state of the propagator (or the parent class), and keeping track of internal state relevant to the projection key representation. Attaching additional events to propagators requires care in terms of adjusting the `wakeup` method, as these often change the internal state of the propagator. Triggering additional calls to this method may result in incorrect behaviour. As such, it is important to ensure that such changes are only applied when the originally attached events are triggered and not when the additional events are triggered. It is also important to note that for BoolView variables, the change variable passed to the `wakeup` method is always zero, which means that it is not possible to rely on the change events. The following provides an overview of the files that have changed and the reason for the change.
+The largest part of the caching-related code can be found in the [caching](./chuffed/caching) subdirectory. However, adding support for caching also required a number of existing files to be modified. In particular, the propagators have been extended and modified to make it possible to include their representations in the projection keys. These modifications include attaching additional events to the variables, adjusting the `wakeup` method to update the internal state of the propagator (or the parent class), and keeping track of internal state relevant to the projection key representation. Attaching additional events to propagators requires care in terms of adjusting the `wakeup` method, as these often change the internal state of the propagator. Triggering additional calls to this method may result in incorrect behaviour. As such, it is important to ensure that such changes are only applied when the originally attached events are triggered and not when the additional events are triggered. It is also important to note that for BoolView variables, the change variable passed to the `wakeup` method is always zero, which means that it is not possible to rely on the change events. Note also that if a variable is fixed upon construction, it immediately calls the wakeup method of attached propagators. The following provides an overview of the files that have changed and the reason for the change.
 
 * [engine.h](./chuffed/core/engine.h) Several class members and methods have been added that are used to keep track of subproblems, add them to the cache when encountering a conflict, and search the cache for dominating subproblems.
 * [engine.cpp](./chuffed/core/engine.cpp) The search loop has been modified to use the cache to search for dominating subproblems. The backtracking function has been adjusted so that it adds subproblems that have been fully explored to the cache. The solve method checks caching support for all constraints that occur in a problem.

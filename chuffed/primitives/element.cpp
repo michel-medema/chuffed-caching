@@ -429,6 +429,13 @@ class IntElemBounds : public EquivalenceConstraint {
 			}
 			y.attach(this, a.size(), EVENT_LU | EVENT_F);
 			x.attach(this, a.size() + 1, EVENT_C | EVENT_F);
+
+			// If x is fixed, this constraint turns into a simple binary equality constraint a[x] = y.
+			if ( x.isFixed() ) { keyIsTrue = true; }
+		}
+
+		void initialise() override {
+			EquivalenceConstraint::initialise();
 		}
 
 		void wakeup(int i, int c) override {
@@ -586,11 +593,21 @@ class IntElemBounds : public EquivalenceConstraint {
 
 		void projectionKey( std::vector<int64_t>& ints, std::vector<bool>& /*bools*/ ) const override {
 			for (int i = 0; i < a.size(); i++) {
-				ints.emplace_back( val(a[i]).value_or(INT_MAX) );
+				if ( a[i].isFixed() ) {
+					//ints.emplace_back( a[i].getVal() );
+					addFixed( a[i], ints );
+				}
+				//ints.emplace_back( val(a[i]).value_or(INT_MAX) );
 			}
 
-			ints.emplace_back( val(x).value_or(INT_MAX) );
-			ints.emplace_back( val(y).value_or(INT_MAX) );
+			addFixed( x, ints );
+			addFixed( y, ints );
+
+			//if ( x.isFixed() ) { ints.emplace_back( x.getVal() ); }
+			//if ( y.isFixed() ) { ints.emplace_back( y.getVal() ); }
+
+			//ints.emplace_back( val(x).value_or(INT_MAX) );
+			//ints.emplace_back( val(y).value_or(INT_MAX) );
 		}
 
 	protected:
