@@ -70,6 +70,13 @@ class LinearGE : public DominanceConstraint {
 
 			if ( R == 0 ) { ++fixed; }
 			if ( !r.isFixed() ) { engine.addBool( r ); }
+			//if ( R != 0 && r.isFalse() ) { satisfied = true; }
+		}
+
+		void initialise() override {
+			DominanceConstraint::initialise();
+
+			// If x is fixed, this constraint turns into a simple binary equality constraint a[x] = y.
 			if ( R != 0 && r.isFalse() ) { satisfied = true; }
 		}
 
@@ -275,6 +282,13 @@ class LinearNE : public EquivalenceConstraint {
 			if ( R == 0 ) { ++fixed; }
 
 			if ( !r.isFixed() ) { engine.addBool(r); }
+			//if ( R != 0 && r.isFalse() ) { satisfied = true; }
+		}
+
+		void initialise() override {
+			EquivalenceConstraint::initialise();
+
+			// If x is fixed, this constraint turns into a simple binary equality constraint a[x] = y.
 			if ( R != 0 && r.isFalse() ) { satisfied = true; }
 		}
 

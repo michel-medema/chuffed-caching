@@ -429,13 +429,13 @@ class IntElemBounds : public EquivalenceConstraint {
 			}
 			y.attach(this, a.size(), EVENT_LU | EVENT_F);
 			x.attach(this, a.size() + 1, EVENT_C | EVENT_F);
-
-			// If x is fixed, this constraint turns into a simple binary equality constraint a[x] = y.
-			if ( x.isFixed() ) { keyIsTrue = true; }
 		}
 
 		void initialise() override {
 			EquivalenceConstraint::initialise();
+
+			// If x is fixed, this constraint turns into a simple binary equality constraint a[x] = y.
+			if ( x.isFixed() ) { keyIsTrue = true; }
 		}
 
 		void wakeup(int i, int c) override {

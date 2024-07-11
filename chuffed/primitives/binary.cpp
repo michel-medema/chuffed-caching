@@ -33,8 +33,13 @@ class BinGE : public EquivalenceConstraint {
 				r.attach(this, 2, EVENT_L | EVENT_U);
 			}
 
-			if ( R == 0 || r.isFixed() || x.isFixed() || y.isFixed() ) { keyIsTrue = true; }
 			if ( R != 0 && !r.isFixed() ) { engine.addBool( r ); }
+		}
+
+		void initialise() override {
+			EquivalenceConstraint::initialise();
+
+			if ( R == 0 || r.isFixed() || x.isFixed() || y.isFixed() ) { keyIsTrue = true; }
 		}
 
 		void wakeup(int i, int c) override {
@@ -131,8 +136,13 @@ class BinNE : public EquivalenceConstraint, public Checker {
 			}
 			//		printf("BinNE: %d %d %d\n", U, V, R);
 
-			if ( R == 0 || r.isFixed() || x.isFixed() || y.isFixed() ) { keyIsTrue = true; }
 			if ( R != 0 && !r.isFixed() ) { engine.addBool( r ); }
+		}
+
+		void initialise() override {
+			EquivalenceConstraint::initialise();
+
+			if ( R == 0 || r.isFixed() || x.isFixed() || y.isFixed() ) { keyIsTrue = true; }
 		}
 
 		void wakeup(int i, int c) override {
