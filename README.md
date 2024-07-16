@@ -40,31 +40,6 @@ The bind mounts and paths should be adjusted as necessary (`/mnt/chuffed/` point
 
 `--cache-events <file>` a path to a file that stores previously recorded cache events (the default is `""`). Only used for `--cache-strategy event`.
 
-## Cache Hits
-
-Problems for which caching is faster: `fast-food`², `roster-sickness`², `golomb`, `tdtsp`, `traveling-tppv`, `java-routing`.
-
-Golomb: only last three are included because the others solve in a small amount of time and use little memory.
-java-routing: trip_8_* removed because they time out for both lazy and caching.
-concert-hall-cap2018.06 removed because it times out for both.
-roster-sickness: all faster than lazy but low memory consumption.
-tdtsp: inst_20_* removed because they time out for both.
-traveling-tppv: faster and high memory consumption, but do not fit in the table.
-
-
-Problems without cache hits: `pentominoes`, `speck-optimisation`¹, `table-layout`¹, `bacp` (only curriculum_8 and curriculum_10 have cache hits), `areas`, `jobshop`, `kakuro`, `knights`, `langford`, `magicseq`, `mario`, `market_split`, `nmseq`, `nsp`, `open_stacks`, `proteindesign12`, `quasigroup7`, `roster`, `ship-schedule`, `solbat`, `steiner-triples`, `stochastic-vrp`, `tc-graph-color`, `latin-squares`.
-
-Problems with cache hits for which lazy clause generation is at least as efficient (often much more efficient): `league`, `maximum-dag`, `mqueens`, `nonogram`, `photo`, `project-planning`, `rubik`, `search_stress`, `stochastic-fjsp`, `table-layout`, `tents`, `tpp`, `trucking`, `java-auto-gen`, `multi-knapsack`, `on-call-rostering`, `oocsp_racks`, `hrc`, `prize-collecting`, `still_life`, `train`, `opd`, `sugiyama`, `trucking_hl`, `valve-network`, `amaze`, `parity-learning`.
-
-Problems for which both lazy clause generation and caching time out or that require too much memory (more than 60 GB) with caching: `queens`, `pattern-set-mining`, `talent_scheduling`, `generalized-peacable-queens`, `bus_scheduling`, `cars`, `celar`, `shortest path`, `community-detection`, `concert-cap2018.06`, `java-routing-trip_8_*`, `tdtsp-inst_20_*`.
-
-Problems with unsupported constraints (in many cases, lazy clause generation is also already very efficient): `elitserien`, `mrcpsp`, `code-generator`, `kidney-exchange`, `sudoku_fixed`, `travelling-thief`, `sudoku_fixed`, `test-scheduling`, `vrplc`, `yumi-static`, `jobshop2`, `mrcpsp`, `mspsp`, `openshop`, `rcpsp`, `rectangle-packing`, `smelt`, `carpet-cutting`, `gfd-schedule`, `racp`, `stripboard`, `peacable_queens`.
-
-Problems that are too large to read or solve: `road-cons`, `routing-flexible`.
-
-¹not all instances could be solved, e.g. because the solver did not have enough memory or because of other issues, but the ones that were solved did not have any cache hits.
-²low memory consumption.
-
 ## Changes
 
 The largest part of the caching-related code can be found in the [caching](./chuffed/caching) subdirectory. However, adding support for caching also required a number of existing files to be modified. In particular, the propagators have been extended and modified to make it possible to include their representations in the projection keys. These modifications include attaching additional events to the variables, adjusting the `wakeup` method to update the internal state of the propagator (or the parent class), and keeping track of internal state relevant to the projection key representation. Attaching additional events to propagators requires care in terms of adjusting the `wakeup` method, as these often change the internal state of the propagator. Triggering additional calls to this method may result in incorrect behaviour. As such, it is important to ensure that such changes are only applied when the originally attached events are triggered and not when the additional events are triggered. It is also important to note that for BoolView variables, the change variable passed to the `wakeup` method is always zero, which means that it is not possible to rely on the change events. Note also that if a variable is fixed upon construction, it immediately calls the wakeup method of attached propagators. The following provides an overview of the files that have changed and the reason for the change.

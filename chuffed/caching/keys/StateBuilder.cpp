@@ -78,15 +78,17 @@ EquivalencePart StateBuilder::getEquivalencePart() const {
   int i = 0;
 
   for ( const auto& [var, dom]: variables ) {
+		const bool domainChanged = StateBuilder::domainChanged( var, dom );
+
     // The representation encodes which variables are fixed and which variables have changed since the start of the
     // search in order to capture whose domains are included. Combined with the min and max values, this encoding ensures
     // that it is not possible for two equivalence parts in which the individual variables are different but their combination
     // is somehow identical to be considered equal (e.g. one key may have two variables with 1111 + 111 and another with
     // 111 + 1111, which would be considered identical without additional information).
     boolRep.push_back( var->isFixed() );
-    boolRep.push_back( StateBuilder::domainChanged( var, dom ) );
+    boolRep.push_back( domainChanged );
 
-    if ( !so.varDominanceCheck && !var->isFixed() && StateBuilder::domainChanged( var, dom ) ) {
+    if ( !so.varDominanceCheck && !var->isFixed() && domainChanged ) {
     //if ( !so.varDominanceCheck && !var->isFixed() && !VariableDomain::originalDomain(var) ) {
       for ( int val = var->getMin(); val <= var->getMax(); ++val ) {
         boolRep.emplace_back( var->indomain( val ) );

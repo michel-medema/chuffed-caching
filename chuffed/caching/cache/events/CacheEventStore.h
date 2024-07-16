@@ -11,7 +11,7 @@
 #include "CacheEvent.h"
 
 
-static const std::string cacheEvents[] = {"CACHE_HIT", "INSERTED", "SUPERSEDED", "REMOVED", "REJECTED", "RESTART", "FINISHED"};
+static const std::string cacheEvents[] = {"CACHE_HIT", "INSERTED", "REJECTED", "RESTART", "FINISHED"};
 
 class CacheEventStore {
     private:
@@ -27,11 +27,11 @@ class CacheEventStore {
 
             file.open( so.eventFile, std::ofstream::out );
 
-            file << "iteration,event,entry,decisionLevel\n";
+            file << "iteration,event,entry,decisionLevel,fixedVars,unfixedVars\n";
 
             for ( const CacheEvent &event: events ) {
                 file << event.iteration << "," << cacheEvents[event.type] << "," << event.entry << ","
-                     << event.decisionLevel << '\n';
+                     << event.decisionLevel << "," << event.fixedVars << "," << event.unfixedVars << '\n';
             }
 
             file.close();

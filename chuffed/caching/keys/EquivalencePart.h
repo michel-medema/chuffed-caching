@@ -1,6 +1,7 @@
 #ifndef CHUFFED_EQUIVALENCEPART_H
 #define CHUFFED_EQUIVALENCEPART_H
 
+#include <cstdint>
 #include <vector>
 #include <algorithm>
 #include <memory>
@@ -12,6 +13,12 @@
 
 class EquivalencePart {
   private:
+		/*
+		 * The equivalence part stores most of the information, such as variable domains and constraint key,
+		 * in an integer vector and a boolean vector. This representation is more space efficient than creating
+		 * separate objects for each of these components of the equivalence part, because vectors have a small
+		 * amount of overhead and creating many vectors results in a large amount of overhead.
+		 */
     std::vector<int64_t> intRep;
     std::vector<std::pair<int, int>> unfixedVarBounds;
     std::vector<bool> boolRep;

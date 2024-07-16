@@ -1184,7 +1184,15 @@ RESULT Engine::search(const std::string& problemLabel) {
 			}
 
 			if ( so.caching ) {
-				ProjectionKey searchState( nodeid, previousDecisionLevel, stateBuilder->getEquivalencePart(), stateBuilder->getDominancePart() );
+				int fixedVars = 0;
+
+				#ifdef LOG_CACHE_EVENTS
+					for ( int i = 0 ; i < engine.vars.size(); ++i ) {
+						if ( engine.vars[i]->isFixed() ) { fixedVars++; }
+					}
+				#endif
+
+				ProjectionKey searchState( nodeid, previousDecisionLevel, fixedVars, engine.vars.size() - fixedVars, stateBuilder->getEquivalencePart(), stateBuilder->getDominancePart() );
 
 				if ( cache->find( searchState, nodeid ).second ) {
 					// If the current state is in the cache, backtrack to the previous node.

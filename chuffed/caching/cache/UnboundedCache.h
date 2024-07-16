@@ -44,6 +44,14 @@ class UnboundedCache: public ICache<EqKey, DomKey> {
       // it is first inserted with an empty list as its value. Otherwise, the iterator points to the existing element.
       auto state = this->cache.emplace( std::move( key.equivalencePart ), std::unordered_map<int, DomKey>() ).first;
 
+			/*
+			 * Technically, it is possible for a new key to dominate a key already in the cache or
+			 * to be dominated by a key in the cache. In the first case, the dominated keys could
+			 * be removed; in the latter case, the new key can be rejected. However, some experimentation
+			 * shows that these situations hardly ever, if ever, occur, making it not worth the
+			 * additional computational complexity of performing such checks. It is only done when events
+			 * are logged so that its occurrence can be analysed.
+			 */
       #ifdef LOG_CACHE_EVENTS
       for ( const auto &item: state->second ) {
         if ( item.second.dominates( key.dominancePart ) ) { // If p is dominated, it does not have to be added to the list.
@@ -67,7 +75,7 @@ class UnboundedCache: public ICache<EqKey, DomKey> {
       }
 
 #ifdef LOG_CACHE_EVENTS
-      eventStore.addEvent( CacheEvent( nodeId, CACHE_EVENTS::INSERTED, key.id, key.decisionLevel ) );
+      eventStore.addEvent( CacheEvent( nodeId, CACHE_EVENTS::INSERTED, key.id, key.decisionLevel, key.fixedVars, key.unfixedVars ) );
 #endif
 
       return true;
