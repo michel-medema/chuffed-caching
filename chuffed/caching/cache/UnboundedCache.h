@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <utility>
+#include <unordered_map>
 
 #include "ICache.h"
 #include "chuffed/caching/keys/ProjectionKey.h"
@@ -54,12 +55,20 @@ class UnboundedCache: public ICache<EqKey, DomKey> {
 			 */
       #ifdef LOG_CACHE_EVENTS
       for ( const auto &item: state->second ) {
-        if ( item.second.dominates( key.dominancePart ) ) { // If p is dominated, it does not have to be added to the list.
-
+        if ( item.second.dominates( key.dominancePart ) ) { // If p is dominated, it does not have to be added to the cache.
           eventStore.addEvent( CacheEvent(nodeId, CACHE_EVENTS::REJECTED, item.first) );
 
           return false;
         }
+
+				if ( key.dominancePart.dominates( item.second ) ) { // If the existing entry is dominated by the new key, it can be removed.
+					eventStore.addEvent( CacheEvent(nodeId, CACHE_EVENTS::SUPERSEDED, item.first) );
+
+					// Remove the dominated entry from the cache.
+					this->identifierMap.erase( item.first );
+					state->second.erase( item.first );
+					--n;
+				}
       }
       #endif
 
@@ -101,54 +110,6 @@ class UnboundedCache: public ICache<EqKey, DomKey> {
     }
 
     int hits() const override { return cacheHits; }
-
-    /*size_t averageKeySize() const override {
-      size_t eqBoolrep = 0;
-      size_t eqUnfixedVarSize = 0;
-      size_t eqIntRep = 0;
-      size_t domVarSize = 0;
-      size_t domConsSize = 0;
-
-      size_t maxKeySize = 0;
-
-      size_t size = 0;
-
-      for ( const auto &entry : this->cache ) {
-        std::tuple<size_t, size_t, size_t, size_t> eqSize = entry.first.size();
-
-        size += std::get<0>(eqSize);// + sizeof(typename decltype(this->cache)::mapped_type);
-
-        if ( std::get<0>(eqSize) > maxKeySize ) {
-          maxKeySize = std::get<0>(eqSize);
-        }
-
-        eqBoolrep += std::get<1>( eqSize);
-        eqUnfixedVarSize += std::get<2>(eqSize);
-        eqIntRep += + std::get<3>( eqSize);
-
-        for ( const auto &item: entry.second ) {
-          std::tuple<size_t, size_t, size_t> domSize = item.second.size();
-
-          size += + std::get<0>(domSize); //+ sizeof(item.first)
-
-          domVarSize += std::get<1>(domSize);
-          domConsSize += + std::get<2>(domSize);
-        }
-      }
-
-      std::cout << "Total size: " << size << std::endl;
-      std::cout << "Total eqBoolRep size: " << eqBoolrep << std::endl;
-      std::cout << "Total eqUnfixedVar size: " << eqUnfixedVarSize << std::endl;
-      std::cout << "Total eqIntRep size: " << eqIntRep << std::endl;
-      std::cout << "Total domVar size: " << domVarSize << std::endl;
-      std::cout << "Total domCons size: " << domConsSize << std::endl;
-
-      //std::cout << "Max size: " << maxKeySize << std::endl;
-
-      //std::cout << "ID map size: " << sizeof(this->identifierMap) + this->identifierMap.size() * (sizeof(typename decltype(this->identifierMap)::key_type) + sizeof(typename decltype(this->identifierMap)::mapped_type)) << std::endl;
-
-      return size / n;
-    }*/
 
     bool empty() const override { return n == 0; }
 

@@ -3,7 +3,7 @@
 
 #include "CacheEventStore.h"
 
-enum CACHE_EVENTS {CACHE_HIT, INSERTED, REJECTED, RESTART, FINISHED};
+enum CACHE_EVENTS {CACHE_HIT, INSERTED, REJECTED, SUPERSEDED, RESTART, FINISHED};
 
 class CacheEvent {
     public:

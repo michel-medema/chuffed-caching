@@ -11,7 +11,7 @@
 #include "CacheEvent.h"
 
 
-static const std::string cacheEvents[] = {"CACHE_HIT", "INSERTED", "REJECTED", "RESTART", "FINISHED"};
+static const std::string cacheEvents[] = {"CACHE_HIT", "INSERTED", "REJECTED", "SUPERSEDED", "RESTART", "FINISHED"};
 
 class CacheEventStore {
     private:
