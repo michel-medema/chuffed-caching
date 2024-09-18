@@ -50,9 +50,10 @@ class UnboundedCache: public ICache<EqKey, DomKey> {
 			 * to be dominated by a key in the cache. In the first case, the dominated keys could
 			 * be removed; in the latter case, the new key can be rejected. However, some experimentation
 			 * shows that these situations hardly ever, if ever, occur, making it not worth the
-			 * additional computational complexity of performing such checks. It is only done when events
-			 * are logged so that its occurrence can be analysed.
+			 * additional computational complexity of performing such checks. The code is kept here for
+			 * experimentation purposes.
 			 */
+			/*
 			for ( auto it = state->second.begin(); it != state->second.end(); ) {
 				if ( it->second.dominates( key.dominancePart ) ) { // If p is dominated, it does not have to be added to the cache.
 					#ifdef LOG_CACHE_EVENTS
@@ -77,6 +78,7 @@ class UnboundedCache: public ICache<EqKey, DomKey> {
 					++it;
 				}
 			}
+			 */
 
       state->second.insert( { key.id, std::move( key.dominancePart ) } );
       ++n;
