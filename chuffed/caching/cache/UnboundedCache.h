@@ -53,19 +53,23 @@ class UnboundedCache: public ICache<EqKey, DomKey> {
 			 * additional computational complexity of performing such checks. It is only done when events
 			 * are logged so that its occurrence can be analysed.
 			 */
-
-      #ifdef LOG_CACHE_EVENTS
 			for ( auto it = state->second.begin(); it != state->second.end(); ) {
 				if ( it->second.dominates( key.dominancePart ) ) { // If p is dominated, it does not have to be added to the cache.
+					#ifdef LOG_CACHE_EVENTS
 					eventStore.addEvent( CacheEvent(nodeId, CACHE_EVENTS::REJECTED, it->first) );
+					#endif
 
 					return false;
 				}
 
-				if ( key.dominancePart.dominates( it->second ) ) { // If the existing entry is dominated by the new key, it can be removed.
+				if ( key.dominancePart.dominates( it->second ) ) { // If an existing entry is dominated by the new key, it can be removed.
+					#ifdef LOG_CACHE_EVENTS
 					eventStore.addEvent( CacheEvent(nodeId, CACHE_EVENTS::SUPERSEDED, it->first) );
+					#endif
 
-					// Remove the dominated entry from the cache.
+					// Remove the dominated entry from the cache. For performance reasons and to ensure that
+					// the iterator points to the correct element in the unordered map after erasure, this
+					// operation cannot use the erase method of the UnboundedCache.
 					this->identifierMap.erase( it->first );
 					it = state->second.erase( it );
 					--n;
@@ -73,24 +77,6 @@ class UnboundedCache: public ICache<EqKey, DomKey> {
 					++it;
 				}
 			}
-
-      /*for ( const auto &item: state->second ) {
-        if ( item.second.dominates( key.dominancePart ) ) { // If p is dominated, it does not have to be added to the cache.
-          eventStore.addEvent( CacheEvent(nodeId, CACHE_EVENTS::REJECTED, item.first) );
-
-          return false;
-        }
-
-				if ( key.dominancePart.dominates( item.second ) ) { // If the existing entry is dominated by the new key, it can be removed.
-					eventStore.addEvent( CacheEvent(nodeId, CACHE_EVENTS::SUPERSEDED, item.first) );
-
-					// Remove the dominated entry from the cache.
-					this->identifierMap.erase( item.first );
-					//state->second.erase( item.first );
-					--n;
-				}
-      }*/
-      #endif
 
       state->second.insert( { key.id, std::move( key.dominancePart ) } );
       ++n;

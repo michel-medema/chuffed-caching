@@ -12,7 +12,11 @@ First, create the build environment:
 
 The `cmake` container can then be used to compile the project:
 
-`docker run -v /mnt/chuffed/:/mnt/chuffed/ -w /mnt/chuffed/ cmake /bin/bash -c "mkdir -p build && cd build && cmake .. && cmake --build ."`.
+`docker run -v /mnt/chuffed/:/mnt/chuffed/ -w /mnt/chuffed/ cmake /bin/bash -c "mkdir -p build && cmake -B build -S . && cmake --build build"`.
+
+Alternatively, the project can be compiled with the logging of cache events enabled:
+
+`docker run -v /mnt/chuffed/:/mnt/chuffed/ -w /mnt/chuffed/ cmake /bin/bash -c "mkdir -p build && cmake -DLOG_CACHE_EVENTS=1 -B build -S . && cmake --build build"`.
 
 Once the project has been compiled and the executable is available in the build directory, the solver can be executed:
 
